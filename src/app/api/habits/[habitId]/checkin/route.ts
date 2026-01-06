@@ -7,11 +7,11 @@ function isValidYmd(s: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
-export async function POST(req: NextRequest, ctx: { params: { habitId: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
 
-	const { habitId } = ctx.params;
+	const { habitId } = await ctx.params;
 	if (!habitId) return badRequest("habitId is required");
 
 	const body = (await req.json().catch(() => null)) as null | { date?: string; note?: string };
@@ -31,11 +31,11 @@ export async function POST(req: NextRequest, ctx: { params: { habitId: string } 
 	return json({ ok: true });
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { habitId: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ habitId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
 
-	const { habitId } = ctx.params;
+	const { habitId } = await ctx.params;
 	const { searchParams } = new URL(req.url);
 	const date = searchParams.get("date") || "";
 	if (!isValidYmd(date)) return badRequest("invalid date");
