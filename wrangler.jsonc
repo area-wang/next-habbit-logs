@@ -8,6 +8,16 @@
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2025-10-08",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"vars": {
+		"SESSION_SECRET": "s+pyLevs8DjMUDMNFadXW1lPfr95as3FnsDcnhc6KH0="
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "habit_database",
+			"database_id": "36355db4-979e-45fb-a4e8-ee3f3f404296"
+		}
+	],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".open-next/assets"
