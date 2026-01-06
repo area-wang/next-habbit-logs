@@ -1,9 +1,14 @@
 import { getDb, getEnv } from "@/lib/db";
-import { bytesToBase64, base64ToBytes, hmacSha256Base64, pbkdf2Sha256, randomTokenBase64Url } from "@/lib/crypto";
+import { bytesToBase64, base64ToBytes, pbkdf2Sha256, randomTokenBase64Url, sha256Base64 } from "@/lib/crypto";
 
 const SESSION_COOKIE_NAME = "session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_ITERATIONS = 100_000;
+
+function getSessionTokenHash(token: string) {
+	void getEnv();
+	return sha256Base64(token);
+}
 
 export type AuthedUser = {
 	id: string;
@@ -47,9 +52,8 @@ export async function verifyPassword(password: string, stored: string) {
 }
 
 export async function createSession(userId: string) {
-	const env = getEnv();
 	const token = randomTokenBase64Url(32);
-	const tokenHash = await hmacSha256Base64(env.SESSION_SECRET, token);
+	const tokenHash = await getSessionTokenHash(token);
 	const now = Date.now();
 	const expiresAt = now + SESSION_TTL_MS;
 	const sessionId = crypto.randomUUID();
@@ -61,14 +65,12 @@ export async function createSession(userId: string) {
 }
 
 export async function deleteSessionByToken(token: string) {
-	const env = getEnv();
-	const tokenHash = await hmacSha256Base64(env.SESSION_SECRET, token);
+	const tokenHash = await getSessionTokenHash(token);
 	await getDb().prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
 }
 
 export async function getUserBySessionToken(token: string) {
-	const env = getEnv();
-	const tokenHash = await hmacSha256Base64(env.SESSION_SECRET, token);
+	const tokenHash = await getSessionTokenHash(token);
 	const now = Date.now();
 	const res = await getDb()
 		.prepare(

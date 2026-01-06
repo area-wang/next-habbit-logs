@@ -1,0 +1,29 @@
+{
+	"id": "/today",
+	"name": "爱你老己",
+	"short_name": "爱你老己",
+	"start_url": "/today",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#0b0b0c",
+	"theme_color": "#0b0b0c",
+	"icons": [
+		{
+			"src": "/logo.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		},
+		{
+			"src": "/logo.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "maskable"
+		},
+		{
+			"src": "/favicon.ico",
+			"sizes": "48x48",
+			"type": "image/x-icon"
+		}
+	]
+}

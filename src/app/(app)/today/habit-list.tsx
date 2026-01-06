@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export type Habit = {
 	id: string;
@@ -9,9 +9,17 @@ export type Habit = {
 };
 
 export default function HabitList({ habits, checkedHabitIds, date }: { habits: Habit[]; checkedHabitIds: string[]; date: string }) {
+	const [items, setItems] = useState<Habit[]>(habits);
 	const initialSet = useMemo(() => new Set(checkedHabitIds), [checkedHabitIds]);
 	const [checked, setChecked] = useState(initialSet);
 	const [loadingId, setLoadingId] = useState<string | null>(null);
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [editTitle, setEditTitle] = useState("");
+	const [editDescription, setEditDescription] = useState("");
+
+	useEffect(() => {
+		setItems(habits);
+	}, [habits]);
 
 	async function toggle(habitId: string) {
 		const nextSet = new Set(checked);
@@ -35,31 +43,105 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 		}
 	}
 
-	if (habits.length === 0) {
+	function beginEdit(h: Habit) {
+		setEditingId(h.id);
+		setEditTitle(h.title);
+		setEditDescription(h.description ? String(h.description) : "");
+	}
+
+	async function saveEdit(h: Habit) {
+		const title = String(editTitle).trim();
+		if (!title) return;
+		const desc = String(editDescription || "").trim();
+		setEditingId(null);
+		const res = await fetch(`/api/habits/${h.id}`, {
+			method: "PATCH",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ title, description: desc ? desc : null }),
+		});
+		if (res.ok) {
+			setItems((prev) => prev.map((x) => (x.id === h.id ? { ...x, title, description: desc ? desc : null } : x)));
+		}
+	}
+
+	if (items.length === 0) {
 		return <div className="text-sm opacity-70">还没有习惯。去“习惯”页创建一个吧。</div>;
 	}
 
 	return (
 		<div className="space-y-2">
-			{habits.map((h) => {
+			{items.map((h) => {
 				const isChecked = checked.has(h.id);
 				return (
-					<button
+					<div
 						key={h.id}
-						className={`w-full text-left rounded-xl border px-4 py-3 transition-colors cursor-pointer ${
+						className={`w-full rounded-xl border px-4 py-3 transition-colors ${
 							isChecked
-								? "border-black bg-black text-white"
+								? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
 								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
 						}`}
-						onClick={() => toggle(h.id)}
-						disabled={loadingId === h.id}
 					>
-						<div className="flex items-center justify-between gap-4">
-							<div className="font-medium truncate">{h.title}</div>
-							<div className="text-xs opacity-80">{loadingId === h.id ? "..." : isChecked ? "已完成" : "未完成"}</div>
+						<div className="flex items-start justify-between gap-4">
+							<label className="flex items-start gap-3 cursor-pointer flex-1">
+								<input
+									type="checkbox"
+									checked={isChecked}
+									onChange={() => toggle(h.id)}
+									disabled={loadingId === h.id}
+									className="mt-1"
+								/>
+								<div className="min-w-0 flex-1">
+									<div className="flex items-center justify-between gap-4">
+										<div className={`font-medium truncate ${isChecked ? "line-through opacity-90" : ""}`}>{h.title}</div>
+										{loadingId === h.id ? <div className="text-xs opacity-70">...</div> : null}
+									</div>
+									{h.description ? (
+										<div className={`text-sm mt-1 ${isChecked ? "opacity-90" : "opacity-70"}`}>{h.description}</div>
+									) : null}
+								</div>
+							</label>
+							<button
+								className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+								onClick={() => (editingId === h.id ? setEditingId(null) : beginEdit(h))}
+								aria-label={editingId === h.id ? "取消编辑" : "编辑"}
+							>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
+									<path
+										d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+										stroke="currentColor"
+										strokeWidth="2"
+										strokeLinecap="round"
+										strokeLinejoin="round"
+									/>
+								</svg>
+							</button>
 						</div>
-						{h.description ? <div className={`text-sm mt-1 ${isChecked ? "opacity-90" : "opacity-70"}`}>{h.description}</div> : null}
-					</button>
+
+						{editingId === h.id ? (
+							<div className="mt-3 grid gap-2">
+								<input
+									className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+									value={editTitle}
+									onChange={(e) => setEditTitle(e.target.value)}
+									placeholder="标题"
+								/>
+								<textarea
+									className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+									value={editDescription}
+									onChange={(e) => setEditDescription(e.target.value)}
+									placeholder="正文/备注（可选）"
+									rows={2}
+								/>
+								<button
+									className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+									onClick={() => saveEdit(h)}
+									disabled={!String(editTitle).trim()}
+								>
+									保存
+								</button>
+							</div>
+						) : null}
+					</div>
 				);
 			})}
 		</div>

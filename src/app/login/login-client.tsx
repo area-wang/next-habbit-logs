@@ -22,6 +22,7 @@ export default function LoginClient() {
 			const url = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
 			const res = await fetch(url, {
 				method: "POST",
+				credentials: "include",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify(mode === "login" ? { email, password } : { email, password, name }),
 			});
@@ -40,7 +41,7 @@ export default function LoginClient() {
 		<div className="min-h-screen flex items-center justify-center p-6">
 			<div className="w-full max-w-md border border-black/10 dark:border-white/15 rounded-2xl p-6 bg-white/70 dark:bg-white/5 backdrop-blur">
 				<div className="flex items-center justify-between">
-					<h1 className="text-xl font-semibold">执行力日志</h1>
+					<h1 className="text-xl font-semibold">爱你老己</h1>
 					<div className="flex gap-2">
 						<button
 							className={`text-sm px-3 py-1 rounded-full border ${mode === "login" ? "bg-black text-white border-black" : "border-black/10 dark:border-white/15"}`}
@@ -106,7 +107,6 @@ export default function LoginClient() {
 				</div>
 
 				<div className="mt-4 text-xs opacity-70 leading-5">
-					<p>目标：把习惯变成可执行的系统，而不是单纯记录。</p>
 					<p>提示：密码至少 8 位。</p>
 				</div>
 			</div>

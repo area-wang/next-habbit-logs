@@ -50,6 +50,9 @@ export async function pbkdf2Sha256(password: string, salt: Uint8Array, iteration
 }
 
 export async function hmacSha256Base64(secret: string, message: string) {
+	if (!secret || String(secret).length === 0) {
+		throw new Error("SESSION_SECRET is required");
+	}
 	const key = await crypto.subtle.importKey(
 		"raw",
 		toArrayBuffer(encoder.encode(secret)),
@@ -59,4 +62,9 @@ export async function hmacSha256Base64(secret: string, message: string) {
 	);
 	const sig = await crypto.subtle.sign("HMAC", key, toArrayBuffer(encoder.encode(message)));
 	return bytesToBase64(new Uint8Array(sig));
+}
+
+export async function sha256Base64(message: string) {
+	const hash = await crypto.subtle.digest("SHA-256", toArrayBuffer(encoder.encode(message)));
+	return bytesToBase64(new Uint8Array(hash));
 }
