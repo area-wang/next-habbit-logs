@@ -3,6 +3,25 @@ import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
 
+async function upsertReminder(db: D1Database, p: {
+	userId: string;
+	targetId: string;
+	anchor: string;
+	offsetMin: number | null;
+	timeMin: number | null;
+	enabled: boolean;
+}) {
+	const id = `rem:${p.userId}:task:${p.targetId}:${p.anchor}`;
+	const now = Date.now();
+	const enabledInt = p.enabled ? 1 : 0;
+	await db
+		.prepare(
+			"INSERT INTO reminders (id, user_id, target_type, target_id, anchor, offset_min, time_min, enabled, created_at, updated_at) VALUES (?, ?, 'task', ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET offset_min = excluded.offset_min, time_min = excluded.time_min, enabled = excluded.enabled, updated_at = excluded.updated_at",
+		)
+		.bind(id, p.userId, p.targetId, p.anchor, p.offsetMin, p.timeMin, enabledInt, now, now)
+		.run();
+}
+
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
@@ -70,6 +89,35 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 		.bind(...binds)
 		.run();
 
+	if (body?.startMin !== undefined || body?.endMin !== undefined || body?.remindBeforeMin !== undefined) {
+		const row = await getDb()
+			.prepare("SELECT start_min, end_min, remind_before_min FROM tasks WHERE id = ? AND user_id = ?")
+			.bind(taskId, user.id)
+			.first();
+		const startMin = row && (row as any).start_min == null ? null : Number((row as any).start_min);
+		const endMin = row && (row as any).end_min == null ? null : Number((row as any).end_min);
+		const rbm = row && (row as any).remind_before_min == null ? null : Number((row as any).remind_before_min);
+		const db = getDb();
+		const startEnabled = startMin != null && rbm != null;
+		await upsertReminder(db, {
+			userId: user.id,
+			targetId: taskId,
+			anchor: "task_start",
+			offsetMin: startEnabled ? -Number(rbm) : null,
+			timeMin: null,
+			enabled: startEnabled,
+		});
+		const endEnabled = endMin != null;
+		await upsertReminder(db, {
+			userId: user.id,
+			targetId: taskId,
+			anchor: "task_end",
+			offsetMin: endEnabled ? 0 : null,
+			timeMin: null,
+			enabled: endEnabled,
+		});
+	}
+
 	return json({ ok: true });
 }
 
@@ -80,6 +128,11 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ taskId: 
 	const { taskId } = await ctx.params;
 	if (!taskId) return badRequest("taskId is required");
 
-	await getDb().prepare("DELETE FROM tasks WHERE id = ? AND user_id = ?").bind(taskId, user.id).run();
+	const db = getDb();
+	await db.prepare("DELETE FROM tasks WHERE id = ? AND user_id = ?").bind(taskId, user.id).run();
+	await db
+		.prepare("DELETE FROM reminders WHERE user_id = ? AND target_type = 'task' AND target_id = ?")
+		.bind(user.id, taskId)
+		.run();
 	return json({ ok: true });
 }

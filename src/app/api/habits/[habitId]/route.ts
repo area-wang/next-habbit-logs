@@ -59,6 +59,11 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ habitId:
 	const { habitId } = await ctx.params;
 	if (!habitId) return badRequest("habitId is required");
 
-	await getDb().prepare("DELETE FROM habits WHERE id = ? AND user_id = ?").bind(habitId, user.id).run();
+	const db = getDb();
+	await db.prepare("DELETE FROM habits WHERE id = ? AND user_id = ?").bind(habitId, user.id).run();
+	await db
+		.prepare("DELETE FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ?")
+		.bind(user.id, habitId)
+		.run();
 	return json({ ok: true });
 }

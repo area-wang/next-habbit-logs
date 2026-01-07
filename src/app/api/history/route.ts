@@ -18,9 +18,22 @@ export async function GET(req: NextRequest) {
 	const start = `${month}-01`;
 	const end = `${month}-31`;
 
+	const habitTotalRes = await getDb()
+		.prepare("SELECT COUNT(*) as c FROM habits WHERE user_id = ? AND active = 1")
+		.bind(user.id)
+		.all();
+	const habitTotalCount = Number((habitTotalRes.results?.[0] as any)?.c) || 0;
+
 	const habitsRes = await getDb()
 		.prepare(
 			"SELECT date_ymd as date, COUNT(*) as habitCount FROM habit_checkins WHERE user_id = ? AND date_ymd >= ? AND date_ymd <= ? GROUP BY date_ymd",
+		)
+		.bind(user.id, start, end)
+		.all();
+
+	const tasksTotalRes = await getDb()
+		.prepare(
+			"SELECT scope_key as date, COUNT(*) as taskTotalCount FROM tasks WHERE user_id = ? AND scope_type = 'day' AND scope_key >= ? AND scope_key <= ? GROUP BY scope_key",
 		)
 		.bind(user.id, start, end)
 		.all();
@@ -34,16 +47,26 @@ export async function GET(req: NextRequest) {
 
 	const habitMap = new Map<string, number>();
 	for (const r of habitsRes.results || []) habitMap.set(String((r as any).date), Number((r as any).habitCount) || 0);
+	const taskTotalMap = new Map<string, number>();
+	for (const r of tasksTotalRes.results || []) {
+		taskTotalMap.set(String((r as any).date), Number((r as any).taskTotalCount) || 0);
+	}
 	const taskMap = new Map<string, number>();
 	for (const r of tasksRes.results || []) taskMap.set(String((r as any).date), Number((r as any).taskDoneCount) || 0);
 
-	const days: Array<{ date: string; habitCount: number; taskDoneCount: number }> = [];
+	const days: Array<{ date: string; habitDoneCount: number; habitTotalCount: number; taskDoneCount: number; taskTotalCount: number }> = [];
 	const [yy, mm] = month.split("-").map((x) => Number(x));
 	const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
 	for (let d = 1; d <= dim; d++) {
 		const dd = String(d).padStart(2, "0");
 		const date = `${month}-${dd}`;
-		days.push({ date, habitCount: habitMap.get(date) || 0, taskDoneCount: taskMap.get(date) || 0 });
+		days.push({
+			date,
+			habitDoneCount: habitMap.get(date) || 0,
+			habitTotalCount,
+			taskDoneCount: taskMap.get(date) || 0,
+			taskTotalCount: taskTotalMap.get(date) || 0,
+		});
 	}
 
 	return json({ month, days });

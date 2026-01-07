@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { utcMsForOffsetMidnight } from "@/lib/date";
+import TimeSelect from "./time-select";
 
 type Task = {
 	id: string;
@@ -40,6 +42,7 @@ export default function TaskList({
 	date: string;
 	tzOffsetMin: number;
 }) {
+	const searchParams = useSearchParams();
 	const [tasks, setTasks] = useState<Task[]>(initialTasks);
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
@@ -47,6 +50,7 @@ export default function TaskList({
 	const [endHHMM, setEndHHMM] = useState("");
 	const [remindBeforeMin, setRemindBeforeMin] = useState(5);
 	const [loading, setLoading] = useState(false);
+	const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
 	const [notifEnabled, setNotifEnabled] = useState(false);
 	const [supportsNotification, setSupportsNotification] = useState(false);
 	const [notifStatus, setNotifStatus] = useState<
@@ -64,6 +68,40 @@ export default function TaskList({
 
 	const doneCount = useMemo(() => tasks.filter((t) => t.status === "done").length, [tasks]);
 	const todoCount = tasks.length - doneCount;
+
+	useEffect(() => {
+		setTasks(initialTasks);
+	}, [initialTasks]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const focus = searchParams.get("focus") || "";
+		if (!focus.startsWith("task:")) return;
+		const taskId = focus.slice("task:".length);
+		if (!taskId) return;
+		setHighlightTaskId(taskId);
+
+		let tries = 0;
+		function esc(v: string) {
+			try {
+				return (window as any).CSS?.escape ? (window as any).CSS.escape(v) : v.replace(/"/g, "\\\"");
+			} catch {
+				return v;
+			}
+		}
+		function tryScroll() {
+			const el = document.querySelector(`[data-task-id="${esc(taskId)}"]`) as HTMLElement | null;
+			if (el) {
+				el.scrollIntoView({ behavior: "smooth", block: "center" });
+				return;
+			}
+			if (tries++ < 12) window.requestAnimationFrame(tryScroll);
+		}
+		tryScroll();
+
+		const id = window.setTimeout(() => setHighlightTaskId(null), 2500);
+		return () => window.clearTimeout(id);
+	}, [searchParams]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -100,13 +138,38 @@ export default function TaskList({
 			if (!Number.isFinite(at) || at <= now) continue;
 			const delay = at - now;
 			const id = window.setTimeout(() => {
-				try {
-					new Notification("爱你老己：即将开始", {
-						body: `${t.title}（还有 ${before} 分钟）`,
-					});
-				} catch {
-					// ignore
-				}
+				const url = `/today?date=${encodeURIComponent(date)}&focus=task:${encodeURIComponent(t.id)}`;
+				const title = "爱你老己：即将开始";
+				const body = `${t.title}（还有 ${before} 分钟）`;
+				const browserOptions = {
+					body,
+				} as NotificationOptions;
+				const swOptions = {
+					body,
+					data: { url },
+				} as NotificationOptions;
+				void (async () => {
+					try {
+						const n = new Notification(title, browserOptions);
+						n.onclick = () => {
+							try {
+								window.location.assign(url);
+							} catch {
+								// ignore
+							}
+						};
+						return;
+					} catch {
+						// ignore
+					}
+					try {
+						const reg = await withTimeout(getReadyServiceWorker(), 15_000, "service_worker_ready_timeout");
+						await reg.showNotification(title, swOptions);
+						return;
+					} catch {
+						// ignore
+					}
+				})();
 			}, delay);
 			timersRef.current.push(id);
 			scheduled += 1;
@@ -153,6 +216,30 @@ export default function TaskList({
 			setNotifEnabled(false);
 			setNotifMessage("请求通知权限失败（可能是非 HTTPS 或浏览器限制）");
 		}
+	}
+
+	function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+		return new Promise<T>((resolve, reject) => {
+			const id = window.setTimeout(() => reject(new Error(label)), ms);
+			p.then(
+				(v) => {
+					window.clearTimeout(id);
+					resolve(v);
+				},
+				(e) => {
+					window.clearTimeout(id);
+					reject(e);
+				},
+			);
+		});
+	}
+
+	async function getReadyServiceWorker() {
+		const existing = await navigator.serviceWorker.getRegistration();
+		if (!existing) {
+			await navigator.serviceWorker.register("/sw.js");
+		}
+		return navigator.serviceWorker.ready;
 	}
 
 	async function deleteTask(task: Task) {
@@ -264,7 +351,7 @@ export default function TaskList({
 			<div className="flex items-end justify-between gap-4">
 				<div>
 					<h2 className="text-lg font-semibold">今日计划</h2>
-					<div className="text-sm opacity-70">轻量 Todo（点击切换完成）。支持时间段与提醒。</div>
+					<div className="text-sm opacity-70">轻量Todo 支持时间段与提醒</div>
 				</div>
 				<div className="text-sm opacity-70">待办 {todoCount} | 已完成 {doneCount}/{tasks.length}</div>
 			</div>
@@ -292,17 +379,19 @@ export default function TaskList({
 					{notifMessage ? <div className="text-xs mt-1 opacity-80">{notifMessage}</div> : null}
 					{scheduleSummary ? <div className="text-xs mt-1 opacity-80">{scheduleSummary}</div> : null}
 				</div>
-				<button
-					className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-						notifEnabled
-							? "bg-black text-white border-black"
-							: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
-					}`}
-					onClick={enableNotifications}
-					disabled={!supportsNotification || notifEnabled || notifStatus === "prompting"}
-				>
-					{!supportsNotification ? "不支持" : notifEnabled ? "已开启" : notifStatus === "prompting" ? "请求中..." : "开启提醒"}
-				</button>
+				<div className="flex flex-col gap-2 items-end">
+					<button
+						className={`flex-shrink-0 text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+							notifEnabled
+								? "bg-black text-white border-black"
+								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+						}`}
+						onClick={enableNotifications}
+						disabled={!supportsNotification || notifEnabled || notifStatus === "prompting"}
+					>
+						{!supportsNotification ? "不支持" : notifEnabled ? "已开启" : notifStatus === "prompting" ? "请求中..." : "前台提醒"}
+					</button>
+				</div>
 			</div>
 
 			<div className="flex gap-2">
@@ -332,22 +421,8 @@ export default function TaskList({
 			/>
 
 			<div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-				<input
-					className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-					type="time"
-					value={startHHMM}
-					onChange={(e) => setStartHHMM(e.target.value)}
-					disabled={loading}
-					placeholder="开始"
-				/>
-				<input
-					className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-					type="time"
-					value={endHHMM}
-					onChange={(e) => setEndHHMM(e.target.value)}
-					disabled={loading}
-					placeholder="结束"
-				/>
+				<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="开始" />
+				<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="结束" />
 				<input
 					className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 					type="number"
@@ -367,11 +442,12 @@ export default function TaskList({
 					{tasks.map((t) => (
 						<div
 							key={t.id}
+							data-task-id={t.id}
 							className={`w-full rounded-xl border px-4 py-3 transition-colors ${
 								t.status === "done"
 									? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
 									: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
-							}`}
+							} ${highlightTaskId === t.id ? "ring-2 ring-violet-500/80" : ""}`}
 						>
 							<div className="flex items-start justify-between gap-4">
 								<label className="flex items-start gap-3 flex-1 cursor-pointer">
@@ -443,18 +519,8 @@ export default function TaskList({
 										rows={2}
 									/>
 									<div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-											type="time"
-											value={editStartHHMM}
-											onChange={(e) => setEditStartHHMM(e.target.value)}
-										/>
-										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-											type="time"
-											value={editEndHHMM}
-											onChange={(e) => setEditEndHHMM(e.target.value)}
-										/>
+										<TimeSelect value={editStartHHMM} onChange={setEditStartHHMM} placeholder="开始" />
+										<TimeSelect value={editEndHHMM} onChange={setEditEndHHMM} placeholder="结束" />
 										<input
 											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 											type="number"

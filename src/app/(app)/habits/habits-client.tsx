@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import TimeSelect from "../today/time-select";
 
 type Habit = {
 	id: string;
@@ -8,6 +9,22 @@ type Habit = {
 	description: string | null;
 	active: number;
 };
+
+function minToHHMM(v: number) {
+	const h = Math.floor(v / 60);
+	const m = v % 60;
+	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function hhmmToMin(s: string) {
+	const m = String(s || "").trim().match(/^(\d{2}):(\d{2})$/);
+	if (!m) return null;
+	const hh = Number(m[1]);
+	const mm = Number(m[2]);
+	if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+	if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+	return hh * 60 + mm;
+}
 
 export default function HabitsClient() {
 	const [habits, setHabits] = useState<Habit[]>([]);
@@ -20,6 +37,28 @@ export default function HabitsClient() {
 	const [editDescription, setEditDescription] = useState("");
 	const [savingId, setSavingId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const [habitReminders, setHabitReminders] = useState<Record<string, number[]>>({});
+	const [remindersLoadingId, setRemindersLoadingId] = useState<string | null>(null);
+	const [addRemindHHMM, setAddRemindHHMM] = useState<Record<string, string>>({});
+	const [remindersError, setRemindersError] = useState<string | null>(null);
+
+	const habitIdSet = useMemo(() => new Set(habits.map((h) => h.id)), [habits]);
+	useEffect(() => {
+		setHabitReminders((prev) => {
+			const next: Record<string, number[]> = {};
+			for (const k of Object.keys(prev)) {
+				if (habitIdSet.has(k)) next[k] = prev[k];
+			}
+			return next;
+		});
+		setAddRemindHHMM((prev) => {
+			const next: Record<string, string> = {};
+			for (const k of Object.keys(prev)) {
+				if (habitIdSet.has(k)) next[k] = prev[k];
+			}
+			return next;
+		});
+	}, [habitIdSet]);
 
 	async function load() {
 		const res = await fetch("/api/habits");
@@ -57,6 +96,64 @@ export default function HabitsClient() {
 		setEditingId(h.id);
 		setEditTitle(h.title);
 		setEditDescription(h.description ? String(h.description) : "");
+		void loadHabitReminders(h.id);
+	}
+
+	async function loadHabitReminders(habitId: string) {
+		setRemindersError(null);
+		setRemindersLoadingId(habitId);
+		try {
+			const res = await fetch(`/api/habits/${habitId}/reminders`);
+			if (!res.ok) {
+				const d = (await res.json().catch(() => null)) as any;
+				setRemindersError(d?.error || "加载提醒失败");
+				return;
+			}
+			const data = (await res.json().catch(() => null)) as any;
+			const times = ((data?.reminders || []) as any[])
+				.map((x) => (x?.timeMin == null ? null : Number(x.timeMin)))
+				.filter((x) => x != null && Number.isFinite(x) && x >= 0 && x <= 1439) as number[];
+			setHabitReminders((prev) => ({ ...prev, [habitId]: Array.from(new Set(times)).sort((a, b) => a - b) }));
+		} finally {
+			setRemindersLoadingId(null);
+		}
+	}
+
+	async function addHabitReminder(habitId: string) {
+		setRemindersError(null);
+		const hhmm = String(addRemindHHMM[habitId] || "").trim();
+		const timeMin = hhmmToMin(hhmm);
+		if (timeMin == null) {
+			setRemindersError("请输入有效时间（HH:MM）");
+			return;
+		}
+		const res = await fetch(`/api/habits/${habitId}/reminders`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ timeMin }),
+		});
+		if (!res.ok) {
+			const d = (await res.json().catch(() => null)) as any;
+			setRemindersError(d?.error || "添加提醒失败");
+			return;
+		}
+		setAddRemindHHMM((prev) => ({ ...prev, [habitId]: "" }));
+		await loadHabitReminders(habitId);
+	}
+
+	async function deleteHabitReminder(habitId: string, timeMin: number) {
+		setRemindersError(null);
+		const res = await fetch(`/api/habits/${habitId}/reminders`, {
+			method: "DELETE",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ timeMin }),
+		});
+		if (!res.ok) {
+			const d = (await res.json().catch(() => null)) as any;
+			setRemindersError(d?.error || "删除提醒失败");
+			return;
+		}
+		await loadHabitReminders(habitId);
 	}
 
 	async function saveEdit(h: Habit) {
@@ -194,6 +291,53 @@ export default function HabitsClient() {
 										placeholder="正文/备注（可选）"
 										rows={2}
 									/>
+
+									<div className="mt-2 rounded-xl border border-black/10 dark:border-white/15 p-3">
+										<div className="text-sm font-medium">提醒时间</div>
+										<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
+										{remindersError ? <div className="text-xs mt-2 text-red-600 dark:text-red-400">{remindersError}</div> : null}
+										<div className="mt-2 flex items-center gap-2">
+											<div className="w-32">
+												<TimeSelect
+													value={addRemindHHMM[h.id] || ""}
+													onChange={(v) => setAddRemindHHMM((prev) => ({ ...prev, [h.id]: v }))}
+													placeholder="例如：08:30"
+													stepMin={5}
+												/>
+											</div>
+											<button
+												className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+												onClick={() => addHabitReminder(h.id)}
+												disabled={remindersLoadingId === h.id}
+											>
+												添加
+											</button>
+										</div>
+
+										<div className="mt-3 space-y-2">
+											{remindersLoadingId === h.id ? <div className="text-xs opacity-70">加载中...</div> : null}
+											{(habitReminders[h.id] || []).length === 0 ? (
+												<div className="text-xs opacity-70">暂无提醒时间</div>
+											) : (
+												<div className="flex flex-wrap gap-2">
+													{(habitReminders[h.id] || []).map((m) => (
+														<div key={m} className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1 text-xs">
+															<span>{minToHHMM(m)}</span>
+															<button
+																className="opacity-70 hover:opacity-100"
+																onClick={() => deleteHabitReminder(h.id, m)}
+																disabled={remindersLoadingId === h.id}
+																aria-label="删除提醒时间"
+															>
+																×
+															</button>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									</div>
+
 									<button
 										className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
 										onClick={() => saveEdit(h)}

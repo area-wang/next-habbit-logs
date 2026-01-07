@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 export type Habit = {
 	id: string;
@@ -9,6 +10,7 @@ export type Habit = {
 };
 
 export default function HabitList({ habits, checkedHabitIds, date }: { habits: Habit[]; checkedHabitIds: string[]; date: string }) {
+	const searchParams = useSearchParams();
 	const [items, setItems] = useState<Habit[]>(habits);
 	const initialSet = useMemo(() => new Set(checkedHabitIds), [checkedHabitIds]);
 	const [checked, setChecked] = useState(initialSet);
@@ -16,10 +18,45 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [editDescription, setEditDescription] = useState("");
+	const [highlightHabitId, setHighlightHabitId] = useState<string | null>(null);
 
 	useEffect(() => {
 		setItems(habits);
 	}, [habits]);
+
+	useEffect(() => {
+		setChecked(new Set(checkedHabitIds));
+	}, [checkedHabitIds]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const focus = searchParams.get("focus") || "";
+		if (!focus.startsWith("habit:")) return;
+		const habitId = focus.slice("habit:".length);
+		if (!habitId) return;
+		setHighlightHabitId(habitId);
+
+		let tries = 0;
+		function esc(v: string) {
+			try {
+				return (window as any).CSS?.escape ? (window as any).CSS.escape(v) : v.replace(/"/g, "\\\"");
+			} catch {
+				return v;
+			}
+		}
+		function tryScroll() {
+			const el = document.querySelector(`[data-habit-id=\"${esc(habitId)}\"]`) as HTMLElement | null;
+			if (el) {
+				el.scrollIntoView({ behavior: "smooth", block: "center" });
+				return;
+			}
+			if (tries++ < 12) window.requestAnimationFrame(tryScroll);
+		}
+		tryScroll();
+
+		const id = window.setTimeout(() => setHighlightHabitId(null), 2500);
+		return () => window.clearTimeout(id);
+	}, [searchParams]);
 
 	async function toggle(habitId: string) {
 		const nextSet = new Set(checked);
@@ -75,8 +112,11 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 				return (
 					<div
 						key={h.id}
+						data-habit-id={h.id}
 						className={`w-full rounded-xl border px-4 py-3 transition-colors ${
-							isChecked
+							highlightHabitId === h.id
+								? "border-yellow-500/60 bg-yellow-500/10"
+								: isChecked
 								? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
 								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
 						}`}

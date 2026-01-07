@@ -1,8 +1,16 @@
 @import "tailwindcss";
+@import "react-day-picker/style.css";
 
 :root {
-	--background: #ffffff;
-	--foreground: #171717;
+	--background: #0b0b0c;
+	--foreground: #ededed;
+	color-scheme: dark;
+	--rdp-accent-color: #8b5cf6;
+	--rdp-accent-background-color: rgba(139, 92, 246, 0.25);
+	--rdp-outline: 2px solid rgba(139, 92, 246, 0.9);
+	--rdp-outline-selected: 2px solid rgba(139, 92, 246, 0.9);
+	--rdp-day_button-border-radius: 12px;
+	--rdp-cell-size: 36px;
 }
 
 @theme inline {
@@ -12,15 +20,53 @@
 	--font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: #0a0a0a;
-		--foreground: #ededed;
-	}
-}
-
 body {
 	background: var(--background);
 	color: var(--foreground);
 	font-family: Arial, Helvetica, sans-serif;
+}
+
+
+.rdp,
+.rdp-root {
+	color: var(--foreground);
+}
+
+.rdp button {
+	color: inherit;
+}
+
+.rdp-selected button {
+	border-color: var(--foreground) !important;
+}
+
+.rdp-today:not(.rdp-outside) {
+	color: #ccc;
+}
+
+.rdp-chevron {
+	fill: var(--foreground);
+}
+
+.rdp-day_button:focus-visible {
+	outline: 2px solid rgba(139, 92, 246, 0.95);
+	outline-offset: 2px;
+}
+
+.rdp-day_selected,
+.rdp-day_selected .rdp-day_button {
+	background: rgba(139, 92, 246, 0.25);
+	color: var(--foreground);
+}
+
+.rdp-day_today .rdp-day_button {
+	border: 1px solid rgba(139, 92, 246, 0.55);
+}
+
+.rdp-nav_button {
+	border-radius: 12px;
+}
+
+.rdp-nav_button:hover {
+	background: rgba(255, 255, 255, 0.08);
 }

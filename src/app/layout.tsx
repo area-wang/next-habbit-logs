@@ -25,6 +25,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
 	themeColor: "#0b0b0c",
+	initialScale: 1,
+	maximumScale: 1,
+	userScalable: false,
 };
 
 export default function RootLayout({
@@ -33,7 +36,7 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en">
+		<html lang="en" className="dark">
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>

@@ -3,6 +3,26 @@ import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
 
+async function upsertReminder(db: D1Database, p: {
+	userId: string;
+	targetType: string;
+	targetId: string;
+	anchor: string;
+	offsetMin: number | null;
+	timeMin: number | null;
+	enabled: boolean;
+}) {
+	const id = `rem:${p.userId}:${p.targetType}:${p.targetId}:${p.anchor}`;
+	const now = Date.now();
+	const enabledInt = p.enabled ? 1 : 0;
+	await db
+		.prepare(
+			"INSERT INTO reminders (id, user_id, target_type, target_id, anchor, offset_min, time_min, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET offset_min = excluded.offset_min, time_min = excluded.time_min, enabled = excluded.enabled, updated_at = excluded.updated_at",
+		)
+		.bind(id, p.userId, p.targetType, p.targetId, p.anchor, p.offsetMin, p.timeMin, enabledInt, now, now)
+		.run();
+}
+
 function isValidYmd(s: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -88,6 +108,28 @@ export async function POST(req: NextRequest) {
 			now,
 		)
 		.run();
+
+	const db = getDb();
+	const startEnabled = startMin != null && remindBeforeMin != null;
+	await upsertReminder(db, {
+		userId: user.id,
+		targetType: "task",
+		targetId: id,
+		anchor: "task_start",
+		offsetMin: startEnabled ? -Number(remindBeforeMin) : null,
+		timeMin: null,
+		enabled: startEnabled,
+	});
+	const endEnabled = endMin != null;
+	await upsertReminder(db, {
+		userId: user.id,
+		targetType: "task",
+		targetId: id,
+		anchor: "task_end",
+		offsetMin: endEnabled ? 0 : null,
+		timeMin: null,
+		enabled: endEnabled,
+	});
 
 	return json({ ok: true, taskId: id });
 }
