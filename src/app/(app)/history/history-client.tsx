@@ -257,7 +257,7 @@ export default function HistoryClient() {
 								</button>
 							</Dialog.Close>
 							<button
-								className="h-10 px-3 rounded-xl bg-black text-white border border-black hover:opacity-90 transition-opacity"
+								className="h-10 px-3 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] border border-[color:var(--foreground)] hover:opacity-90 transition-opacity"
 								onClick={() => {
 									const d = selectedDay?.date;
 									if (!d) return;

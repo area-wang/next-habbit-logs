@@ -213,14 +213,14 @@ export default function HabitsClient() {
 					/>
 					<input
 						className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-						placeholder="描述（可选）：最低门槛、触发器等"
+						placeholder="描述（可选）"
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
 						disabled={creating}
 					/>
 					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
 					<button
-						className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+						className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 						onClick={create}
 						disabled={creating || !title.trim()}
 					>
@@ -297,7 +297,7 @@ export default function HabitsClient() {
 										<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
 										{remindersError ? <div className="text-xs mt-2 text-red-600 dark:text-red-400">{remindersError}</div> : null}
 										<div className="mt-2 flex items-center gap-2">
-											<div className="w-32">
+											<div className="w-48">
 												<TimeSelect
 													value={addRemindHHMM[h.id] || ""}
 													onChange={(v) => setAddRemindHHMM((prev) => ({ ...prev, [h.id]: v }))}
@@ -339,7 +339,7 @@ export default function HabitsClient() {
 									</div>
 
 									<button
-										className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+										className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 										onClick={() => saveEdit(h)}
 										disabled={!String(editTitle).trim() || savingId === h.id}
 									>
@@ -353,4 +353,4 @@ export default function HabitsClient() {
 			</div>
 		</div>
 	);
-}
+	}

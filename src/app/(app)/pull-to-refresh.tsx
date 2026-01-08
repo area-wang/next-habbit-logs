@@ -96,7 +96,7 @@ export default function PullToRefresh() {
 				transition: refreshing ? "none" : "transform 120ms ease",
 			}}
 		>
-			<div className="mx-auto mt-2 w-fit rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-black/60 backdrop-blur px-3 py-1 text-xs opacity-80">
+			<div className="mx-auto mt-2 w-fit rounded-full border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur px-3 py-1 text-xs opacity-80">
 				{refreshing ? "刷新中..." : pull >= 56 ? "松手刷新" : "下拉刷新"}
 			</div>
 		</div>

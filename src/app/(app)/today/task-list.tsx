@@ -15,6 +15,12 @@ type Task = {
 	remindBeforeMin?: number | null;
 };
 
+type Habit = {
+	id: string;
+	title: string;
+	description: string | null;
+};
+
 function hhmmToMin(s: string) {
 	if (!s) return null;
 	const m = s.match(/^(\d{2}):(\d{2})$/);
@@ -37,13 +43,20 @@ export default function TaskList({
 	initialTasks,
 	date,
 	tzOffsetMin,
+	habits,
+	habitRemindersByHabitId,
+	checkedHabitIds,
 }: {
 	initialTasks: Task[];
 	date: string;
 	tzOffsetMin: number;
+	habits?: Habit[];
+	habitRemindersByHabitId?: Record<string, number[]>;
+	checkedHabitIds?: string[];
 }) {
 	const searchParams = useSearchParams();
 	const [tasks, setTasks] = useState<Task[]>(initialTasks);
+	const checkedHabitIdSet = useMemo(() => new Set(checkedHabitIds || []), [checkedHabitIds]);
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
 	const [startHHMM, setStartHHMM] = useState("");
@@ -68,6 +81,9 @@ export default function TaskList({
 
 	const doneCount = useMemo(() => tasks.filter((t) => t.status === "done").length, [tasks]);
 	const todoCount = tasks.length - doneCount;
+	const habitTodoCount = useMemo(() => {
+		return (habits || []).filter((h) => !checkedHabitIdSet.has(h.id)).length;
+	}, [habits, checkedHabitIdSet]);
 
 	useEffect(() => {
 		setTasks(initialTasks);
@@ -176,6 +192,53 @@ export default function TaskList({
 			if (at < nextAt) nextAt = at;
 		}
 
+		for (const h of habits || []) {
+			if (checkedHabitIdSet.has(h.id)) continue;
+			const times = (habitRemindersByHabitId && habitRemindersByHabitId[h.id]) || [];
+			for (const timeMin of times) {
+				const at = base + Number(timeMin) * 60_000;
+				if (!Number.isFinite(at) || at <= now) continue;
+				const delay = at - now;
+				const id = window.setTimeout(() => {
+					const url = `/today?date=${encodeURIComponent(date)}&focus=habit:${encodeURIComponent(h.id)}`;
+					const title = "爱你老己：习惯提醒";
+					const body = h.title;
+					const browserOptions = {
+						body,
+					} as NotificationOptions;
+					const swOptions = {
+						body,
+						data: { url },
+					} as NotificationOptions;
+					void (async () => {
+						try {
+							const n = new Notification(title, browserOptions);
+							n.onclick = () => {
+								try {
+									window.location.assign(url);
+								} catch {
+									// ignore
+								}
+							};
+							return;
+						} catch {
+							// ignore
+						}
+						try {
+							const reg = await withTimeout(getReadyServiceWorker(), 15_000, "service_worker_ready_timeout");
+							await reg.showNotification(title, swOptions);
+							return;
+						} catch {
+							// ignore
+						}
+					})();
+				}, delay);
+				timersRef.current.push(id);
+				scheduled += 1;
+				if (at < nextAt) nextAt = at;
+			}
+		}
+
 		if (scheduled === 0) {
 			setScheduleSummary("未安排提醒：需要任务处于待办、设置开始时间，且提醒时间在未来");
 		} else {
@@ -186,7 +249,7 @@ export default function TaskList({
 			timersRef.current.forEach((id) => window.clearTimeout(id));
 			timersRef.current = [];
 		};
-	}, [date, tzOffsetMin, notifEnabled, tasks]);
+	}, [date, tzOffsetMin, notifEnabled, tasks, habits, habitRemindersByHabitId, checkedHabitIdSet]);
 
 	async function enableNotifications() {
 		if (typeof window === "undefined") return;
@@ -204,7 +267,7 @@ export default function TaskList({
 			setNotifStatus(ok ? "granted" : perm === "denied" ? "denied" : "default");
 			if (ok) {
 				try {
-					new Notification("提醒已开启", { body: "将在任务开始前按设置时间提醒你" });
+					new Notification("提醒已开启", { body: "将在设置时间弹出系统通知" });
 				} catch {
 					setNotifMessage("已开启，但当前浏览器阻止了测试通知（不影响后续提醒）");
 				}
@@ -353,10 +416,13 @@ export default function TaskList({
 					<h2 className="text-lg font-semibold">今日计划</h2>
 					<div className="text-sm opacity-70">轻量Todo 支持时间段与提醒</div>
 				</div>
-				<div className="text-sm opacity-70">待办 {todoCount} | 已完成 {doneCount}/{tasks.length}</div>
+				<div className="text-sm opacity-70">
+					待办 {todoCount + habitTodoCount}
+					{habits && habits.length > 0 ? `（任务 ${todoCount} | 习惯 ${habitTodoCount}）` : ""} | 已完成 {doneCount}/{tasks.length}
+				</div>
 			</div>
 
-			<div className="flex items-center justify-between gap-3 rounded-xl border border-black/10 dark:border-white/15 px-4 py-3">
+			<div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-color)] px-4 py-3">
 				<div className="text-sm">
 					<div className="font-medium">提醒</div>
 					<div className="text-xs opacity-70 mt-1">开启后，会在任务开始前 N 分钟弹出系统通知。</div>
@@ -379,12 +445,12 @@ export default function TaskList({
 					{notifMessage ? <div className="text-xs mt-1 opacity-80">{notifMessage}</div> : null}
 					{scheduleSummary ? <div className="text-xs mt-1 opacity-80">{scheduleSummary}</div> : null}
 				</div>
-				<div className="flex flex-col gap-2 items-end">
+				<div className="flex flex-shrink-0 flex-col gap-2 items-end">
 					<button
 						className={`flex-shrink-0 text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
 							notifEnabled
-								? "bg-black text-white border-black"
-								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
+								: "border-[color:var(--border-color)] hover:bg-[color:var(--surface)]"
 						}`}
 						onClick={enableNotifications}
 						disabled={!supportsNotification || notifEnabled || notifStatus === "prompting"}
@@ -396,14 +462,14 @@ export default function TaskList({
 
 			<div className="flex gap-2">
 				<input
-					className="flex-1 rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+					className="flex-1 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 					placeholder="新增一个今日任务..."
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
 					disabled={loading}
 				/>
 				<button
-					className="rounded-xl bg-black text-white px-4 font-medium disabled:opacity-60"
+					className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] px-4 font-medium disabled:opacity-60"
 					onClick={create}
 					disabled={loading || !title.trim()}
 				>
@@ -412,7 +478,7 @@ export default function TaskList({
 			</div>
 
 			<textarea
-				className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+				className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 				placeholder="备注/正文（可选）"
 				value={description}
 				onChange={(e) => setDescription(e.target.value)}
@@ -424,7 +490,7 @@ export default function TaskList({
 				<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="开始" />
 				<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="结束" />
 				<input
-					className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
+					className="w-full h-10 text-sm rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 outline-none"
 					type="number"
 					min={0}
 					max={1440}
@@ -443,10 +509,8 @@ export default function TaskList({
 						<div
 							key={t.id}
 							data-task-id={t.id}
-							className={`w-full rounded-xl border px-4 py-3 transition-colors ${
-								t.status === "done"
-									? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
-									: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+							className={`w-full rounded-xl border border-[color:var(--border-color)] px-4 py-3 transition-colors ${
+								t.status === "done" ? "bg-[color:var(--surface-strong)]" : "hover:bg-[color:var(--surface)]"
 							} ${highlightTaskId === t.id ? "ring-2 ring-violet-500/80" : ""}`}
 						>
 							<div className="flex items-start justify-between gap-4">
@@ -471,7 +535,7 @@ export default function TaskList({
 								</label>
 								<div className="flex items-center gap-2">
 									<button
-										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
 										onClick={() => (editingId === t.id ? setEditingId(null) : beginEdit(t))}
 										aria-label={editingId === t.id ? "取消编辑" : "编辑"}
 									>
@@ -486,7 +550,7 @@ export default function TaskList({
 										</svg>
 									</button>
 									<button
-										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
 										onClick={() => deleteTask(t)}
 										aria-label="删除"
 									>
@@ -506,13 +570,13 @@ export default function TaskList({
 							{editingId === t.id ? (
 								<div className="mt-3 grid gap-2">
 									<input
-										className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+										className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 										value={editTitle}
 										onChange={(e) => setEditTitle(e.target.value)}
 										placeholder="标题"
 									/>
 									<textarea
-										className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+										className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 										value={editDescription}
 										onChange={(e) => setEditDescription(e.target.value)}
 										placeholder="正文/备注（可选）"
@@ -522,7 +586,7 @@ export default function TaskList({
 										<TimeSelect value={editStartHHMM} onChange={setEditStartHHMM} placeholder="开始" />
 										<TimeSelect value={editEndHHMM} onChange={setEditEndHHMM} placeholder="结束" />
 										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
+											className="w-full h-10 text-sm rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 outline-none"
 											type="number"
 											min={0}
 											max={1440}
@@ -532,7 +596,7 @@ export default function TaskList({
 										/>
 									</div>
 									<button
-										className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+										className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 										onClick={() => saveEdit(t)}
 										disabled={!String(editTitle).trim()}
 									>

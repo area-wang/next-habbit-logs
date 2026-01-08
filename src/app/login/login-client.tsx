@@ -39,19 +39,27 @@ export default function LoginClient() {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center p-6">
-			<div className="w-full max-w-md border border-black/10 dark:border-white/15 rounded-2xl p-6 bg-white/70 dark:bg-white/5 backdrop-blur">
+			<div className="w-full max-w-md rounded-2xl p-6 border border-[color:var(--border-color)] bg-[color:var(--surface-strong)] backdrop-blur">
 				<div className="flex items-center justify-between">
 					<h1 className="text-xl font-semibold">爱你老己</h1>
 					<div className="flex gap-2">
 						<button
-							className={`text-sm px-3 py-1 rounded-full border ${mode === "login" ? "bg-black text-white border-black" : "border-black/10 dark:border-white/15"}`}
+							className={`text-sm px-3 py-1 rounded-full border ${
+								mode === "login"
+									? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
+									: "border-black/10 dark:border-white/15"
+							}`}
 							onClick={() => setMode("login")}
 							disabled={loading}
 						>
 							登录
 						</button>
 						<button
-							className={`text-sm px-3 py-1 rounded-full border ${mode === "signup" ? "bg-black text-white border-black" : "border-black/10 dark:border-white/15"}`}
+							className={`text-sm px-3 py-1 rounded-full border ${
+								mode === "signup"
+									? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
+									: "border-black/10 dark:border-white/15"
+							}`}
 							onClick={() => setMode("signup")}
 							disabled={loading}
 						>
@@ -98,7 +106,7 @@ export default function LoginClient() {
 					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
 
 					<button
-						className="w-full rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+						className="w-full rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 						onClick={submit}
 						disabled={loading}
 					>

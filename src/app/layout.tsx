@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import PwaRegister from "./pwa-register";
 
@@ -36,10 +37,33 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" className="dark">
+		<html lang="en" suppressHydrationWarning>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
+				<Script id="theme-init" strategy="beforeInteractive">
+					{`
+						(function () {
+							try {
+								var t = window.localStorage.getItem('theme');
+								var root = document.documentElement;
+								if (t === 'butter') {
+									root.classList.remove('dark');
+									root.classList.add('theme-butter');
+								} else {
+									root.classList.add('dark');
+									root.classList.remove('theme-butter');
+								}
+							} catch (e) {
+								try {
+									document.documentElement.classList.add('dark');
+								} catch (e2) {
+									// ignore
+								}
+							}
+						})();
+					`}
+				</Script>
 				<PwaRegister />
 				{children}
 			</body>

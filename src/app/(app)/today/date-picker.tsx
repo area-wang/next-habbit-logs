@@ -55,7 +55,7 @@ export default function TodayDatePicker({ date }: { date: string }) {
 				<Popover.Portal>
 					<Popover.Content
 						sideOffset={8}
-						className="z-50 rounded-2xl border border-black/10 dark:border-white/15 bg-white/95 dark:bg-black/80 backdrop-blur shadow-xl p-3"
+						className="z-50 rounded-2xl border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur shadow-xl p-3"
 					>
 						<DayPicker
 							mode="single"
@@ -74,7 +74,7 @@ export default function TodayDatePicker({ date }: { date: string }) {
 								day: { borderRadius: 12 },
 							}}
 						/>
-						<Popover.Arrow className="fill-white/95 dark:fill-black/80" />
+						<Popover.Arrow className="fill-[color:var(--popover-bg)]" />
 					</Popover.Content>
 				</Popover.Portal>
 			</div>

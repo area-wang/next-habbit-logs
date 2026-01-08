@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/date";
+import TimeSelect from "../today/time-select";
 
 type ScopeType = "day" | "week" | "month" | "year";
 
@@ -170,7 +171,9 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					<button
 						key={x.k}
 						className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-							scopeType === x.k ? "bg-black text-white border-black" : "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+							scopeType === x.k
+								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
+								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
 						}`}
 						onClick={() => setScopeType(x.k)}
 						disabled={loading}
@@ -208,23 +211,11 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 						<label className="block">
 							<div className="text-xs opacity-70 mb-1">开始时间</div>
-							<input
-								className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-								type="time"
-								value={startHHMM}
-								onChange={(e) => setStartHHMM(e.target.value)}
-								disabled={loading}
-							/>
+							<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="例如：09:00" stepMin={5} disabled={loading} />
 						</label>
 						<label className="block">
 							<div className="text-xs opacity-70 mb-1">结束时间</div>
-							<input
-								className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-								type="time"
-								value={endHHMM}
-								onChange={(e) => setEndHHMM(e.target.value)}
-								disabled={loading}
-							/>
+							<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="例如：18:00" stepMin={5} disabled={loading} />
 						</label>
 						<label className="block">
 							<div className="text-xs opacity-70 mb-1">提前提醒（分钟）</div>
@@ -241,7 +232,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					</div>
 					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
 					<button
-						className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+						className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 						onClick={create}
 						disabled={loading || !title.trim()}
 					>
@@ -331,18 +322,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										rows={2}
 									/>
 									<div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-											type="time"
-											value={editStartHHMM}
-											onChange={(e) => setEditStartHHMM(e.target.value)}
-										/>
-										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-											type="time"
-											value={editEndHHMM}
-											onChange={(e) => setEditEndHHMM(e.target.value)}
-										/>
+										<TimeSelect value={editStartHHMM} onChange={setEditStartHHMM} placeholder="开始时间" stepMin={5} />
+										<TimeSelect value={editEndHHMM} onChange={setEditEndHHMM} placeholder="结束时间" stepMin={5} />
 										<input
 											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 											type="number"
@@ -354,7 +335,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										/>
 									</div>
 									<button
-										className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+										className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 										onClick={() => saveEdit(t)}
 										disabled={!String(editTitle).trim()}
 									>

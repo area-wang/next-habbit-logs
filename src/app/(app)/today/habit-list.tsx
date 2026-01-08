@@ -113,12 +113,12 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 					<div
 						key={h.id}
 						data-habit-id={h.id}
-						className={`w-full rounded-xl border px-4 py-3 transition-colors ${
+						className={`w-full rounded-xl border border-[color:var(--border-color)] px-4 py-3 transition-colors ${
 							highlightHabitId === h.id
 								? "border-yellow-500/60 bg-yellow-500/10"
 								: isChecked
-								? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
-								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+								? "bg-[color:var(--surface-strong)]"
+								: "hover:bg-[color:var(--surface)]"
 						}`}
 					>
 						<div className="flex items-start justify-between gap-4">
@@ -141,7 +141,7 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 								</div>
 							</label>
 							<button
-								className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+								className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
 								onClick={() => (editingId === h.id ? setEditingId(null) : beginEdit(h))}
 								aria-label={editingId === h.id ? "取消编辑" : "编辑"}
 							>
@@ -160,20 +160,20 @@ export default function HabitList({ habits, checkedHabitIds, date }: { habits: H
 						{editingId === h.id ? (
 							<div className="mt-3 grid gap-2">
 								<input
-									className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+									className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 									value={editTitle}
 									onChange={(e) => setEditTitle(e.target.value)}
 									placeholder="标题"
 								/>
 								<textarea
-									className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+									className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 									value={editDescription}
 									onChange={(e) => setEditDescription(e.target.value)}
 									placeholder="正文/备注（可选）"
 									rows={2}
 								/>
 								<button
-									className="rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+									className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
 									onClick={() => saveEdit(h)}
 									disabled={!String(editTitle).trim()}
 								>

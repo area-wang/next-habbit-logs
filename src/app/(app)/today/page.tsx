@@ -44,6 +44,28 @@ export default async function TodayPage({
 		.all();
 	const checkedHabitIds = (checkinsRes.results || []).map((r: any) => String(r.habit_id));
 
+	let habitRemindersByHabitId: Record<string, number[]> = {};
+	if (habits.length > 0) {
+		const ids = habits.map((h) => String((h as any).id));
+		const placeholders = ids.map(() => "?").join(",");
+		const remindersRes = await getDb()
+			.prepare(
+				`SELECT target_id as habit_id, time_min FROM reminders WHERE user_id = ? AND target_type = 'habit' AND anchor = 'habit_time' AND enabled = 1 AND target_id IN (${placeholders}) ORDER BY time_min ASC`,
+			)
+			.bind(user.id, ...ids)
+			.all();
+		for (const r of remindersRes.results || []) {
+			const habitId = String((r as any).habit_id);
+			const timeMin = (r as any).time_min == null ? null : Number((r as any).time_min);
+			if (timeMin == null || !Number.isFinite(timeMin) || timeMin < 0 || timeMin > 1439) continue;
+			if (!habitRemindersByHabitId[habitId]) habitRemindersByHabitId[habitId] = [];
+			habitRemindersByHabitId[habitId].push(timeMin);
+		}
+		for (const k of Object.keys(habitRemindersByHabitId)) {
+			habitRemindersByHabitId[k] = Array.from(new Set(habitRemindersByHabitId[k])).sort((a, b) => a - b);
+		}
+	}
+
 	return (
 		<div className="space-y-6">
 			<div>
@@ -58,6 +80,9 @@ export default async function TodayPage({
 				<TaskList
 					date={date}
 					tzOffsetMin={tz}
+					habits={habits}
+					habitRemindersByHabitId={habitRemindersByHabitId}
+					checkedHabitIds={checkedHabitIds}
 					initialTasks={tasks.map((t) => ({
 						id: String(t.id),
 						title: String(t.title),
@@ -74,7 +99,7 @@ export default async function TodayPage({
 				<div className="flex items-end justify-between gap-4">
 					<div>
 						<h2 className="text-lg font-semibold">今日习惯</h2>
-						<div className="text-sm opacity-70">一键完成/取消，保持“低摩擦”。</div>
+						<div className="text-sm opacity-70">一键完成/取消</div>
 					</div>
 				</div>
 				<HabitList habits={habits} checkedHabitIds={checkedHabitIds} date={date} />
