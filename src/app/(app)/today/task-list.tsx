@@ -1,7 +1,8 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { utcMsForOffsetMidnight } from "@/lib/date";
 import TimeSelect from "./time-select";
 
@@ -20,6 +21,18 @@ type Habit = {
 	title: string;
 	description: string | null;
 };
+
+function shiftYmd(ymd: string, deltaDays: number) {
+	const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (!m) return "";
+	const y = Number(m[1]);
+	const mo = Number(m[2]);
+	const d = Number(m[3]);
+	if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return "";
+	const baseUtc = Date.UTC(y, mo - 1, d, 0, 0, 0, 0);
+	const next = new Date(baseUtc + deltaDays * 86400_000);
+	return next.toISOString().slice(0, 10);
+}
 
 function hhmmToMin(s: string) {
 	if (!s) return null;
@@ -46,6 +59,7 @@ export default function TaskList({
 	habits,
 	habitRemindersByHabitId,
 	checkedHabitIds,
+	dailyTaskNotesById,
 }: {
 	initialTasks: Task[];
 	date: string;
@@ -53,10 +67,13 @@ export default function TaskList({
 	habits?: Habit[];
 	habitRemindersByHabitId?: Record<string, number[]>;
 	checkedHabitIds?: string[];
+	dailyTaskNotesById?: Record<string, string>;
 }) {
 	const searchParams = useSearchParams();
+	const pathname = usePathname();
+	const isHistoryMode = useMemo(() => String(pathname || "").startsWith("/history"), [pathname]);
 	const [tasks, setTasks] = useState<Task[]>(initialTasks);
-	const checkedHabitIdSet = useMemo(() => new Set(checkedHabitIds || []), [checkedHabitIds]);
+	const [checkedHabitIdSet, setCheckedHabitIdSet] = useState<Set<string>>(() => new Set(checkedHabitIds || []));
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
 	const [startHHMM, setStartHHMM] = useState("");
@@ -78,6 +95,18 @@ export default function TaskList({
 	const [editStartHHMM, setEditStartHHMM] = useState("");
 	const [editEndHHMM, setEditEndHHMM] = useState("");
 	const [editRemindBeforeMin, setEditRemindBeforeMin] = useState(5);
+	const [taskDailyNotesById, setTaskDailyNotesById] = useState<Record<string, string>>(dailyTaskNotesById || {});
+	const [noteOpenTaskId, setNoteOpenTaskId] = useState<string | null>(null);
+	const [noteDraft, setNoteDraft] = useState("");
+	const [noteSaving, setNoteSaving] = useState(false);
+	const [habitRemindersLiveByHabitId, setHabitRemindersLiveByHabitId] = useState<Record<string, number[]>>(
+		habitRemindersByHabitId || {},
+	);
+	const [copyOpen, setCopyOpen] = useState(false);
+	const [copyLoading, setCopyLoading] = useState(false);
+	const [copyError, setCopyError] = useState<string | null>(null);
+	const [yesterdayTasks, setYesterdayTasks] = useState<any[]>([]);
+	const [selectedYesterdayTaskIds, setSelectedYesterdayTaskIds] = useState<Set<string>>(new Set());
 
 	const doneCount = useMemo(() => tasks.filter((t) => t.status === "done").length, [tasks]);
 	const todoCount = tasks.length - doneCount;
@@ -88,6 +117,178 @@ export default function TaskList({
 	useEffect(() => {
 		setTasks(initialTasks);
 	}, [initialTasks]);
+
+	const yesterday = useMemo(() => shiftYmd(date, -1), [date]);
+
+	useEffect(() => {
+		if (!copyOpen) return;
+		if (!yesterday) return;
+		if (typeof window === "undefined") return;
+		let canceled = false;
+		setCopyError(null);
+		setCopyLoading(true);
+		void (async () => {
+			try {
+				const res = await fetch(
+					`/api/tasks?scopeType=day&scopeKey=${encodeURIComponent(yesterday)}`,
+					{ method: "GET", headers: { "content-type": "application/json" } },
+				);
+				if (!res.ok) {
+					const d = (await res.json().catch(() => null)) as any;
+					if (canceled) return;
+					setCopyError(d?.error || "加载昨天任务失败");
+					setYesterdayTasks([]);
+					setSelectedYesterdayTaskIds(new Set());
+					return;
+				}
+				const data = (await res.json().catch(() => null)) as any;
+				const list = Array.isArray(data?.tasks) ? (data.tasks as any[]) : [];
+				if (canceled) return;
+				setYesterdayTasks(list);
+				setSelectedYesterdayTaskIds(new Set(list.map((t) => String((t as any).id || "")).filter(Boolean)));
+			} catch {
+				if (canceled) return;
+				setCopyError("加载昨天任务失败");
+				setYesterdayTasks([]);
+				setSelectedYesterdayTaskIds(new Set());
+			} finally {
+				if (!canceled) setCopyLoading(false);
+			}
+		})();
+		return () => {
+			canceled = true;
+		};
+	}, [copyOpen, yesterday]);
+
+	function toggleSelectYesterdayTaskId(taskId: string) {
+		setSelectedYesterdayTaskIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(taskId)) next.delete(taskId);
+			else next.add(taskId);
+			return next;
+		});
+	}
+
+	function selectAllYesterdayTasks() {
+		setSelectedYesterdayTaskIds(new Set(yesterdayTasks.map((t) => String((t as any).id || "")).filter(Boolean)));
+	}
+
+	function clearAllYesterdayTasks() {
+		setSelectedYesterdayTaskIds(new Set());
+	}
+
+	async function confirmCopyYesterdayTasks() {
+		if (!yesterday) return;
+		const ids = Array.from(selectedYesterdayTaskIds);
+		if (ids.length === 0) {
+			setCopyError("请先选择要复制的任务");
+			return;
+		}
+		setCopyError(null);
+		setCopyLoading(true);
+		try {
+			const res = await fetch("/api/tasks/copy", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ fromScopeKey: yesterday, toScopeKey: date, taskIds: ids }),
+			});
+			if (!res.ok) {
+				const d = (await res.json().catch(() => null)) as any;
+				setCopyError(d?.error || "复制失败");
+				return;
+			}
+			const data = (await res.json().catch(() => null)) as any;
+			const created = Array.isArray(data?.createdTasks) ? (data.createdTasks as any[]) : [];
+			const mapped: Task[] = created
+				.map((t) => ({
+					id: String((t as any).id),
+					title: String((t as any).title || ""),
+					description: (t as any).description == null ? null : String((t as any).description),
+					status: String((t as any).status || "todo"),
+					startMin: (t as any).start_min == null ? null : Number((t as any).start_min),
+					endMin: (t as any).end_min == null ? null : Number((t as any).end_min),
+					remindBeforeMin: (t as any).remind_before_min == null ? null : Number((t as any).remind_before_min),
+				}))
+				.filter((t) => t.id && t.title.trim());
+			setTasks((prev) => [...mapped, ...prev]);
+			setCopyOpen(false);
+		} finally {
+			setCopyLoading(false);
+		}
+	}
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		function onHabitCheckinChanged(ev: Event) {
+			const e = ev as CustomEvent<{ habitId?: string; checked?: boolean; date?: string }>;
+			const habitId = String(e?.detail?.habitId || "");
+			if (!habitId) return;
+			const eventDate = e?.detail?.date;
+			if (eventDate && String(eventDate) !== String(date)) return;
+			const checked = e?.detail?.checked === true;
+			setCheckedHabitIdSet((prev) => {
+				const next = new Set(prev);
+				if (checked) next.add(habitId);
+				else next.delete(habitId);
+				return next;
+			});
+		}
+		window.addEventListener("habit-checkin-changed", onHabitCheckinChanged);
+		return () => window.removeEventListener("habit-checkin-changed", onHabitCheckinChanged);
+	}, [date]);
+
+	useEffect(() => {
+		setTaskDailyNotesById(dailyTaskNotesById || {});
+	}, [dailyTaskNotesById]);
+
+	useEffect(() => {
+		setHabitRemindersLiveByHabitId(habitRemindersByHabitId || {});
+	}, [habitRemindersByHabitId]);
+
+	useEffect(() => {
+		if (!notifEnabled) return;
+		if (typeof window === "undefined") return;
+		const hs = habits || [];
+		if (hs.length === 0) return;
+
+		let canceled = false;
+		void (async () => {
+			try {
+				const results = await Promise.all(
+					hs.map(async (h) => {
+						const habitId = String((h as any).id || "");
+						if (!habitId) return { habitId: "", times: [] as number[] };
+						const res = await fetch(`/api/habits/${encodeURIComponent(habitId)}/reminders`, {
+							method: "GET",
+							headers: { "content-type": "application/json" },
+						});
+						if (!res.ok) return { habitId, times: [] as number[] };
+						const data = (await res.json().catch(() => null)) as any;
+						const times = ((data?.reminders || []) as any[])
+							.filter((x) => x && x.enabled !== false)
+							.map((x) => (x?.timeMin == null ? null : Number(x.timeMin)))
+							.filter((x) => x != null && Number.isFinite(x) && x >= 0 && x <= 1439) as number[];
+						return { habitId, times: Array.from(new Set(times)).sort((a, b) => a - b) };
+					}),
+				);
+				if (canceled) return;
+				setHabitRemindersLiveByHabitId((prev) => {
+					const next: Record<string, number[]> = { ...prev };
+					for (const r of results) {
+						if (!r.habitId) continue;
+						next[r.habitId] = r.times;
+					}
+					return next;
+				});
+			} catch {
+				// ignore
+			}
+		})();
+
+		return () => {
+			canceled = true;
+		};
+	}, [notifEnabled, habits]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -144,6 +345,8 @@ export default function TaskList({
 		const base = utcMsForOffsetMidnight(date, tzOffsetMin);
 		const now = Date.now();
 		let scheduled = 0;
+		let scheduledTasks = 0;
+		let scheduledHabits = 0;
 		let nextAt = Number.POSITIVE_INFINITY;
 
 		for (const t of tasks) {
@@ -154,7 +357,8 @@ export default function TaskList({
 			if (!Number.isFinite(at) || at <= now) continue;
 			const delay = at - now;
 			const id = window.setTimeout(() => {
-				const url = `/today?date=${encodeURIComponent(date)}&focus=task:${encodeURIComponent(t.id)}`;
+				const basePath = isHistoryMode ? "/history" : "/today";
+				const url = `${basePath}?date=${encodeURIComponent(date)}&focus=task:${encodeURIComponent(t.id)}`;
 				const title = "爱你老己：即将开始";
 				const body = `${t.title}（还有 ${before} 分钟）`;
 				const browserOptions = {
@@ -189,18 +393,20 @@ export default function TaskList({
 			}, delay);
 			timersRef.current.push(id);
 			scheduled += 1;
+			scheduledTasks += 1;
 			if (at < nextAt) nextAt = at;
 		}
 
 		for (const h of habits || []) {
 			if (checkedHabitIdSet.has(h.id)) continue;
-			const times = (habitRemindersByHabitId && habitRemindersByHabitId[h.id]) || [];
+			const times = (habitRemindersLiveByHabitId && habitRemindersLiveByHabitId[h.id]) || [];
 			for (const timeMin of times) {
 				const at = base + Number(timeMin) * 60_000;
 				if (!Number.isFinite(at) || at <= now) continue;
 				const delay = at - now;
 				const id = window.setTimeout(() => {
-					const url = `/today?date=${encodeURIComponent(date)}&focus=habit:${encodeURIComponent(h.id)}`;
+					const basePath = isHistoryMode ? "/history" : "/today";
+					const url = `${basePath}?date=${encodeURIComponent(date)}&focus=habit:${encodeURIComponent(h.id)}`;
 					const title = "爱你老己：习惯提醒";
 					const body = h.title;
 					const browserOptions = {
@@ -235,6 +441,7 @@ export default function TaskList({
 				}, delay);
 				timersRef.current.push(id);
 				scheduled += 1;
+				scheduledHabits += 1;
 				if (at < nextAt) nextAt = at;
 			}
 		}
@@ -242,14 +449,16 @@ export default function TaskList({
 		if (scheduled === 0) {
 			setScheduleSummary("未安排提醒：需要任务处于待办、设置开始时间，且提醒时间在未来");
 		} else {
-			setScheduleSummary(`已安排 ${scheduled} 个提醒，最近一次：${new Date(nextAt).toLocaleString()}`);
+			setScheduleSummary(
+				`已安排 ${scheduled} 个提醒（任务 ${scheduledTasks} | 习惯 ${scheduledHabits}），最近一次：${new Date(nextAt).toLocaleString()}`,
+			);
 		}
 
 		return () => {
 			timersRef.current.forEach((id) => window.clearTimeout(id));
 			timersRef.current = [];
 		};
-	}, [date, tzOffsetMin, notifEnabled, tasks, habits, habitRemindersByHabitId, checkedHabitIdSet]);
+	}, [date, tzOffsetMin, notifEnabled, tasks, habits, habitRemindersLiveByHabitId, checkedHabitIdSet, isHistoryMode]);
 
 	async function enableNotifications() {
 		if (typeof window === "undefined") return;
@@ -402,23 +611,164 @@ export default function TaskList({
 	async function toggle(task: Task) {
 		const next = task.status === "done" ? "todo" : "done";
 		setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: next } : t)));
-		await fetch(`/api/tasks/${task.id}`, {
+		await fetch(`/api/tasks/${task.id}` , {
 			method: "PATCH",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ status: next }),
 		});
 	}
 
+	function openNote(taskId: string) {
+		setNoteOpenTaskId(taskId);
+		setNoteDraft(taskDailyNotesById[taskId] || "");
+	}
+
+	async function saveNote() {
+		if (!noteOpenTaskId) return;
+		setNoteSaving(true);
+		try {
+			const itemId = noteOpenTaskId;
+			const res = await fetch("/api/daily-item-notes", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ date, itemType: "task", itemId, note: noteDraft }),
+			});
+			if (res.ok) {
+				const next = String(noteDraft || "").trim();
+				setTaskDailyNotesById((prev) => {
+					const copy = { ...prev };
+					if (!next) delete copy[itemId];
+					else copy[itemId] = next;
+					return copy;
+				});
+				setNoteOpenTaskId(null);
+			}
+		} finally {
+			setNoteSaving(false);
+		}
+	}
+
 	return (
 		<div className="space-y-3">
-			<div className="flex items-end justify-between gap-4">
+			<div className="flex justify-between sm:items-end sm:justify-between">
 				<div>
-					<h2 className="text-lg font-semibold">今日计划</h2>
+					<h2 className="text-lg font-semibold">{isHistoryMode ? "当日计划" : "今日计划"}</h2>
 					<div className="text-sm opacity-70">轻量Todo 支持时间段与提醒</div>
 				</div>
-				<div className="text-sm opacity-70">
-					待办 {todoCount + habitTodoCount}
-					{habits && habits.length > 0 ? `（任务 ${todoCount} | 习惯 ${habitTodoCount}）` : ""} | 已完成 {doneCount}/{tasks.length}
+				<div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3">
+					{!isHistoryMode ? (
+						<Dialog.Root open={copyOpen} onOpenChange={setCopyOpen}>
+							<Dialog.Trigger asChild>
+								<button
+									className="text-sm px-3 py-1 rounded-full border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
+									type="button"
+								>
+									复制昨天计划
+								</button>
+							</Dialog.Trigger>
+							<Dialog.Portal>
+								<Dialog.Overlay className="fixed inset-0 bg-black/60" />
+								<Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[color:var(--border-color)] bg-[color:var(--background)] shadow-xl p-4">
+									<Dialog.Title className="font-semibold">复制昨天计划</Dialog.Title>
+									<div className="text-sm opacity-70 mt-1">选择要复制到今天（{date}）的任务</div>
+									<div className="text-sm opacity-70 mt-1">来源日期：{yesterday || "-"}</div>
+
+									<div className="mt-4 flex items-center justify-between gap-3">
+										<div className="flex items-center gap-2">
+											<button
+												className="h-9 px-3 rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors"
+												onClick={selectAllYesterdayTasks}
+												type="button"
+												disabled={copyLoading || yesterdayTasks.length === 0}
+											>
+												全选
+											</button>
+											<button
+												className="h-9 px-3 rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors"
+												onClick={clearAllYesterdayTasks}
+												type="button"
+												disabled={copyLoading || yesterdayTasks.length === 0}
+											>
+												全不选
+											</button>
+										</div>
+										<div className="text-xs opacity-70">
+											已选 {selectedYesterdayTaskIds.size}/{yesterdayTasks.length}
+										</div>
+									</div>
+
+									{copyError ? <div className="text-sm text-red-600 dark:text-red-400 mt-3">{copyError}</div> : null}
+
+									<div className="mt-3 max-h-[45vh] overflow-auto rounded-xl border border-[color:var(--border-color)]">
+										{copyLoading ? (
+											<div className="p-4 text-sm opacity-70">加载中...</div>
+										) : yesterdayTasks.length === 0 ? (
+											<div className="p-4 text-sm opacity-70">昨天没有任务可复制</div>
+										) : (
+											<div className="divide-y divide-[color:var(--border-color)]">
+												{yesterdayTasks.map((t) => {
+													const id = String((t as any).id || "");
+													const title = String((t as any).title || "");
+													const status = String((t as any).status || "todo");
+													const startMin = (t as any).start_min == null ? null : Number((t as any).start_min);
+													const endMin = (t as any).end_min == null ? null : Number((t as any).end_min);
+													const rbm = (t as any).remind_before_min == null ? null : Number((t as any).remind_before_min);
+													const checked = !!id && selectedYesterdayTaskIds.has(id);
+													return (
+														<label key={id} className="flex items-start gap-3 p-3 cursor-pointer">
+															<input
+																type="checkbox"
+																checked={checked}
+																onChange={() => toggleSelectYesterdayTaskId(id)}
+																disabled={!id || copyLoading}
+																className="mt-1"
+															/>
+															<div className="min-w-0 flex-1">
+																<div className="font-medium truncate">
+																	{title}
+																	{status === "done" ? <span className="text-xs opacity-60">（昨天已完成）</span> : null}
+																</div>
+																{startMin != null || endMin != null ? (
+																	<div className="text-sm opacity-70 mt-1">
+																		{minToHHMM(startMin)}{endMin != null ? ` - ${minToHHMM(endMin)}` : ""}
+																		{rbm != null ? <span>{` | 提前 ${rbm} 分钟`}</span> : null}
+																	</div>
+																) : null}
+															</div>
+														</label>
+													);
+												})}
+											</div>
+										)}
+									</div>
+
+									<div className="mt-4 flex items-center justify-end gap-2">
+										<Dialog.Close asChild>
+											<button
+												className="h-10 px-3 rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors"
+												disabled={copyLoading}
+												type="button"
+											>
+												取消
+											</button>
+										</Dialog.Close>
+										<button
+											className="h-10 px-3 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] border border-[color:var(--foreground)] hover:opacity-90 transition-opacity disabled:opacity-60"
+											onClick={confirmCopyYesterdayTasks}
+											disabled={copyLoading || selectedYesterdayTaskIds.size === 0}
+											type="button"
+										>
+											{copyLoading ? "复制中..." : "复制到今天"}
+										</button>
+									</div>
+								</Dialog.Content>
+							</Dialog.Portal>
+						</Dialog.Root>
+					) : null}
+					<div className="text-sm opacity-70 leading-tight sm:text-right">
+						待办 {todoCount + habitTodoCount}
+						{habits && habits.length > 0 ? `（任务 ${todoCount} | 习惯 ${habitTodoCount}）` : ""}
+					</div>
 				</div>
 			</div>
 
@@ -463,7 +813,7 @@ export default function TaskList({
 			<div className="flex gap-2">
 				<input
 					className="flex-1 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
-					placeholder="新增一个今日任务..."
+					placeholder={isHistoryMode ? "新增一个任务..." : "新增一个今日任务..."}
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
 					disabled={loading}
@@ -502,7 +852,7 @@ export default function TaskList({
 			</div>
 
 			{tasks.length === 0 ? (
-				<div className="text-sm opacity-70">还没有今日任务。</div>
+				<div className="text-sm opacity-70">{isHistoryMode ? "还没有任务。" : "还没有今日任务。"}</div>
 			) : (
 				<div className="space-y-2">
 					{tasks.map((t) => (
@@ -534,6 +884,25 @@ export default function TaskList({
 									</div>
 								</label>
 								<div className="flex items-center gap-2">
+									{t.status !== "done" || taskDailyNotesById[t.id] ? (
+										<button
+											className={`h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer ${
+												taskDailyNotesById[t.id] ? "bg-[color:var(--surface)]" : ""
+											}`}
+											onClick={() => openNote(t.id)}
+											aria-label="未完成原因/备注"
+										>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
+												<path
+													d="M4 4h16v16H4V4zm4 4h8M8 12h8M8 16h6"
+													stroke="currentColor"
+													strokeWidth="2"
+													strokeLinecap="round"
+													strokeLinejoin="round"
+												/>
+											</svg>
+										</button>
+									) : null}
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
 										onClick={() => (editingId === t.id ? setEditingId(null) : beginEdit(t))}
@@ -608,6 +977,42 @@ export default function TaskList({
 					))}
 				</div>
 			)}
+
+			<Dialog.Root open={!!noteOpenTaskId} onOpenChange={(open) => (!open ? setNoteOpenTaskId(null) : null)}>
+				<Dialog.Portal>
+					<Dialog.Overlay className="fixed inset-0 bg-black/60" />
+					<Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[color:var(--border-color)] bg-[color:var(--background)] shadow-xl p-4">
+						<Dialog.Title className="font-semibold">未完成原因/备注</Dialog.Title>
+						<div className="text-sm opacity-70 mt-1">只和当天的任务关联，不会修改任务本身的描述。</div>
+						<textarea
+							className="w-full mt-4 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
+							value={noteDraft}
+							onChange={(e) => setNoteDraft(e.target.value)}
+							rows={4}
+							placeholder="例如：今天临时加班 / 状态不好 / 改到明天..."
+							disabled={noteSaving}
+						/>
+						<div className="mt-4 flex items-center justify-end gap-2">
+							<Dialog.Close asChild>
+								<button
+									className="h-10 px-3 rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors"
+									disabled={noteSaving}
+								>
+									取消
+								</button>
+							</Dialog.Close>
+							<button
+								className="h-10 px-3 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] border border-[color:var(--foreground)] hover:opacity-90 transition-opacity disabled:opacity-60"
+								onClick={saveNote}
+								disabled={noteSaving}
+								type="button"
+							>
+								{noteSaving ? "保存中..." : "保存"}
+							</button>
+						</div>
+					</Dialog.Content>
+				</Dialog.Portal>
+			</Dialog.Root>
 		</div>
 	);
 }

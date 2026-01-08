@@ -18,6 +18,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: s
 	const date = body?.date ? String(body.date) : "";
 	if (!isValidYmd(date)) return badRequest("invalid date");
 
+	const habitRes = await getDb()
+		.prepare("SELECT start_date, end_date FROM habits WHERE id = ? AND user_id = ?")
+		.bind(habitId, user.id)
+		.all();
+	const h0 = habitRes.results?.[0] as any;
+	const startDate = h0?.start_date == null ? "" : String(h0.start_date);
+	const endDate = h0?.end_date == null ? null : String(h0.end_date);
+	if (!startDate) return badRequest("habit not found");
+	if (date < startDate) return badRequest("date is before habit startDate");
+	if (endDate && date > endDate) return badRequest("date is after habit endDate");
+
 	const id = crypto.randomUUID();
 	const now = Date.now();
 

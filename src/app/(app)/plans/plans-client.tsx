@@ -122,6 +122,25 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		setEditStartHHMM(minToHHMM(task.start_min));
 		setEditEndHHMM(minToHHMM(task.end_min));
 		setEditRemindBeforeMin(task.remind_before_min == null ? 5 : Number(task.remind_before_min));
+		if (typeof window !== "undefined") {
+			let tries = 0;
+			function esc(v: string) {
+				try {
+					return (window as any).CSS?.escape ? (window as any).CSS.escape(v) : v.replace(/"/g, "\\\"");
+				} catch {
+					return v;
+				}
+			}
+			function tryScroll() {
+				const el = document.querySelector(`[data-task-id=\"${esc(task.id)}\"]`) as HTMLElement | null;
+				if (el) {
+					el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+					return;
+				}
+				if (tries++ < 12) window.requestAnimationFrame(tryScroll);
+			}
+			window.requestAnimationFrame(tryScroll);
+		}
 	}
 
 	async function saveEdit(task: Task) {
@@ -248,6 +267,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					tasks.map((t) => (
 						<div
 							key={t.id}
+							data-task-id={t.id}
 							className={`w-full rounded-xl border px-4 py-3 transition-colors ${
 								t.status === "done"
 									? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
@@ -334,13 +354,23 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 											placeholder="提前提醒（分钟）"
 										/>
 									</div>
-									<button
-										className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
-										onClick={() => saveEdit(t)}
-										disabled={!String(editTitle).trim()}
-									>
-										保存
-									</button>
+									<div className="flex items-center gap-2">
+										<button
+											className="flex-1 h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+											onClick={() => setEditingId(null)}
+											type="button"
+										>
+											取消
+										</button>
+										<button
+											className="flex-1 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
+											onClick={() => saveEdit(t)}
+											disabled={!String(editTitle).trim()}
+											type="button"
+										>
+											保存
+										</button>
+									</div>
 								</div>
 							) : null}
 						</div>

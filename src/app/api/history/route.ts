@@ -18,11 +18,11 @@ export async function GET(req: NextRequest) {
 	const start = `${month}-01`;
 	const end = `${month}-31`;
 
-	const habitTotalRes = await getDb()
-		.prepare("SELECT COUNT(*) as c FROM habits WHERE user_id = ? AND active = 1")
+	const activeHabitsRes = await getDb()
+		.prepare("SELECT start_date, end_date FROM habits WHERE user_id = ? AND active = 1")
 		.bind(user.id)
 		.all();
-	const habitTotalCount = Number((habitTotalRes.results?.[0] as any)?.c) || 0;
+	const activeHabits = (activeHabitsRes.results || []) as any[];
 
 	const habitsRes = await getDb()
 		.prepare(
@@ -60,6 +60,15 @@ export async function GET(req: NextRequest) {
 	for (let d = 1; d <= dim; d++) {
 		const dd = String(d).padStart(2, "0");
 		const date = `${month}-${dd}`;
+		let habitTotalCount = 0;
+		for (const h of activeHabits) {
+			const startDate = h?.start_date == null ? "" : String(h.start_date);
+			const endDate = h?.end_date == null ? null : String(h.end_date);
+			if (!startDate) continue;
+			if (startDate > date) continue;
+			if (endDate && endDate < date) continue;
+			habitTotalCount += 1;
+		}
 		days.push({
 			date,
 			habitDoneCount: habitMap.get(date) || 0,

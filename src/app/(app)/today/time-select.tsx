@@ -129,7 +129,7 @@ export default function TimeSelect({
 				>
 					<div className="p-1">
 						<button
-							className="w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface)] transition-colors opacity-80"
+							className="w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface-strong)] transition-colors opacity-80"
 							onClick={() => setParts({ hour: null, minute: null })}
 							type="button"
 						>
@@ -140,8 +140,8 @@ export default function TimeSelect({
 								{hours.map((h) => (
 									<button
 										key={h.value}
-										className={`w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface)] transition-colors ${
-											parts.hour === h.value ? "bg-black/5 dark:bg-white/10" : ""
+										className={`w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface-strong)] transition-colors ${
+											parts.hour === h.value ? "bg-[color:var(--surface-strong)] font-semibold" : ""
 										}`}
 										onClick={() => setParts({ hour: h.value, close: false })}
 										type="button"
@@ -154,8 +154,8 @@ export default function TimeSelect({
 								{minutes.map((m) => (
 									<button
 										key={m.value}
-										className={`w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface)] transition-colors ${
-											parts.minute === m.value ? "bg-black/5 dark:bg-white/10" : ""
+										className={`w-full text-center text-sm px-3 py-2 rounded-xl hover:bg-[color:var(--surface-strong)] transition-colors ${
+											parts.minute === m.value ? "bg-[color:var(--surface-strong)] font-semibold" : ""
 										}`}
 										onClick={() => setParts({ minute: m.value, close: true })}
 										type="button"
@@ -166,7 +166,7 @@ export default function TimeSelect({
 							</div>
 						</div>
 					</div>
-					<Popover.Arrow className="fill-white/95 dark:fill-black/80" />
+					<Popover.Arrow className="fill-[color:var(--popover-bg)]" />
 				</Popover.Content>
 			</Popover.Portal>
 		</Popover.Root>

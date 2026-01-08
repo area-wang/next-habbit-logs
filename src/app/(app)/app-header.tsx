@@ -90,22 +90,32 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 						<LogoutButton />
 					</div>
 
-					<button
-						className="sm:hidden h-10 w-10 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors"
-						onClick={() => setOpen((v) => !v)}
-						aria-label={open ? "收起菜单" : "展开菜单"}
-						aria-expanded={open}
-						type="button"
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="opacity-80">
-							<path
-								d="M4 7h16M4 12h16M4 17h16"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-							/>
-						</svg>
-					</button>
+					<div className="sm:hidden flex items-center gap-2">
+						<button
+							className="h-10 px-3 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors text-sm"
+							onClick={toggleTheme}
+							type="button"
+							aria-label={theme === "dark" ? "切换到淡黄色主题" : "切换到黑色主题"}
+						>
+							{theme === "dark" ? "淡黄" : "黑色"}
+						</button>
+						<button
+							className="h-10 w-10 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors"
+							onClick={() => setOpen((v) => !v)}
+							aria-label={open ? "收起菜单" : "展开菜单"}
+							aria-expanded={open}
+							type="button"
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="opacity-80">
+								<path
+									d="M4 7h16M4 12h16M4 17h16"
+									stroke="currentColor"
+									strokeWidth="2"
+									strokeLinecap="round"
+								/>
+							</svg>
+						</button>
+					</div>
 				</div>
 
 				{open ? (

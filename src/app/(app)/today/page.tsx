@@ -12,8 +12,10 @@ function isValidYmd(s: string) {
 
 export default async function TodayPage({
 	searchParams,
+ 	showDatePicker = false,
 }: {
 	searchParams?: Promise<{ date?: string | string[] }>;
+ 	showDatePicker?: boolean;
 }) {
 	const user = await requireUser();
 	const sp = searchParams ? await searchParams : undefined;
@@ -22,11 +24,15 @@ export default async function TodayPage({
 	const tzRaw = cookieStore.get("tzOffsetMin")?.value;
 	const tz = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
 	const dateParam = Array.isArray(raw) ? raw[0] : raw;
-	const date = dateParam && isValidYmd(dateParam) ? dateParam : ymdInOffset(new Date(), tz);
+	const today = ymdInOffset(new Date(), tz);
+	const date = dateParam && isValidYmd(dateParam) ? dateParam : today;
+	const isToday = date === today;
 
 	const habitsRes = await getDb()
-		.prepare("SELECT id, title, description FROM habits WHERE user_id = ? AND active = 1 ORDER BY created_at DESC")
-		.bind(user.id)
+		.prepare(
+			"SELECT id, title, description FROM habits WHERE user_id = ? AND active = 1 AND start_date <= ? AND (end_date IS NULL OR end_date = '' OR end_date >= ?) ORDER BY created_at DESC",
+		)
+		.bind(user.id, date, date)
 		.all();
 	const habits = (habitsRes.results || []) as Habit[];
 
@@ -37,6 +43,22 @@ export default async function TodayPage({
 		.bind(user.id, date)
 		.all();
 	const tasks = (tasksRes.results || []) as any[];
+
+	const dailyItemNotesRes = await getDb()
+		.prepare("SELECT item_type, item_id, note FROM daily_item_notes WHERE user_id = ? AND date_ymd = ?")
+		.bind(user.id, date)
+		.all();
+	const taskDailyNotesById: Record<string, string> = {};
+	const habitDailyNotesById: Record<string, string> = {};
+	for (const r of dailyItemNotesRes.results || []) {
+		const itemType = String((r as any).item_type);
+		const itemId = String((r as any).item_id);
+		const note = (r as any).note == null ? "" : String((r as any).note);
+		if (!itemId) continue;
+		if (!note.trim()) continue;
+		if (itemType === "task") taskDailyNotesById[itemId] = note;
+		if (itemType === "habit") habitDailyNotesById[itemId] = note;
+	}
 
 	const checkinsRes = await getDb()
 		.prepare("SELECT habit_id FROM habit_checkins WHERE user_id = ? AND date_ymd = ?")
@@ -69,11 +91,13 @@ export default async function TodayPage({
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold">今天</h1>
+				<h1 className="text-2xl font-semibold">{isToday ? "今天" : "日计划"}</h1>
 				<div className="text-sm opacity-70 mt-1">日期：{date}</div>
-				<div className="mt-3">
-					<TodayDatePicker date={date} />
-				</div>
+				{showDatePicker ? (
+					<div className="mt-3">
+						<TodayDatePicker date={date} />
+					</div>
+				) : null}
 			</div>
 
 			<section className="space-y-3">
@@ -83,6 +107,7 @@ export default async function TodayPage({
 					habits={habits}
 					habitRemindersByHabitId={habitRemindersByHabitId}
 					checkedHabitIds={checkedHabitIds}
+					dailyTaskNotesById={taskDailyNotesById}
 					initialTasks={tasks.map((t) => ({
 						id: String(t.id),
 						title: String(t.title),
@@ -98,11 +123,11 @@ export default async function TodayPage({
 			<section className="space-y-3">
 				<div className="flex items-end justify-between gap-4">
 					<div>
-						<h2 className="text-lg font-semibold">今日习惯</h2>
+						<h2 className="text-lg font-semibold">{isToday ? "今日习惯" : "当日习惯"}</h2>
 						<div className="text-sm opacity-70">一键完成/取消</div>
 					</div>
 				</div>
-				<HabitList habits={habits} checkedHabitIds={checkedHabitIds} date={date} />
+				<HabitList habits={habits} checkedHabitIds={checkedHabitIds} date={date} dailyHabitNotesById={habitDailyNotesById} />
 			</section>
 		</div>
 	);

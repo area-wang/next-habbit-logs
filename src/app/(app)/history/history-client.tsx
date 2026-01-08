@@ -1,9 +1,11 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useMemo, useState } from "react";
+import * as Select from "@radix-ui/react-select";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { UIEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ymInOffset } from "@/lib/date";
+import { ymdInOffset, ymInOffset } from "@/lib/date";
 
 type Day = { date: string; habitDoneCount: number; habitTotalCount: number; taskDoneCount: number; taskTotalCount: number };
 
@@ -34,6 +36,63 @@ function daysInMonth(ym: string) {
 	return d.getUTCDate();
 }
 
+function PrettySelect({
+	value,
+	onValueChange,
+	options,
+	ariaLabel,
+	renderValue,
+	viewportRef,
+	onViewportScroll,
+}: {
+	value: string;
+	onValueChange: (v: string) => void;
+	options: Array<{ value: string; label: string }>;
+	ariaLabel: string;
+	renderValue?: (v: string) => string;
+	viewportRef?: { current: HTMLDivElement | null };
+	onViewportScroll?: (e: UIEvent<HTMLDivElement>) => void;
+}) {
+	return (
+		<Select.Root value={value} onValueChange={onValueChange}>
+			<Select.Trigger
+				className="h-9 px-3 rounded-full border border-black/10 dark:border-white/15 bg-transparent text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-2"
+				aria-label={ariaLabel}
+			>
+				<Select.Value>{renderValue ? renderValue(value) : value}</Select.Value>
+				<Select.Icon className="opacity-70">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+						<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+					</svg>
+				</Select.Icon>
+			</Select.Trigger>
+			<Select.Portal>
+				<Select.Content
+					position="popper"
+					sideOffset={8}
+					className="z-50 overflow-hidden rounded-2xl border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur shadow-xl"
+				>
+					<Select.Viewport
+						ref={viewportRef as any}
+						onScroll={onViewportScroll as any}
+						className="p-1 max-h-48 overflow-y-auto"
+					>
+						{options.map((opt) => (
+							<Select.Item
+								key={opt.value}
+								value={opt.value}
+								className="relative px-3 py-2 text-sm rounded-xl cursor-pointer outline-none hover:bg-[color:var(--surface-strong)] data-[state=checked]:bg-[color:var(--rdp-accent-background-color)] data-[state=checked]:font-semibold"
+							>
+								<Select.ItemText>{opt.label}</Select.ItemText>
+							</Select.Item>
+						))}
+					</Select.Viewport>
+				</Select.Content>
+			</Select.Portal>
+		</Select.Root>
+	);
+}
+
 export default function HistoryClient() {
 	const router = useRouter();
 	const [month, setMonth] = useState("");
@@ -42,6 +101,15 @@ export default function HistoryClient() {
 	const [selectedDay, setSelectedDay] = useState<
 		null | { date: string; dayNum: number; habitDoneCount: number; habitTotalCount: number; taskDoneCount: number; taskTotalCount: number }
 	>(null);
+	const todayYmd = useMemo(() => {
+		try {
+			const d = new Date();
+			const offsetMinutes = -d.getTimezoneOffset();
+			return ymdInOffset(d, offsetMinutes);
+		} catch {
+			return "";
+		}
+	}, []);
 
 	const dayMap = useMemo(() => {
 		const m = new Map<string, Day>();
@@ -84,6 +152,81 @@ export default function HistoryClient() {
 			cancelled = true;
 		};
 	}, [month]);
+
+	const selectedYear = useMemo(() => String(month || "").slice(0, 4), [month]);
+	const baseYear = useMemo(() => {
+		const isValidYear = /^\d{4}$/.test(selectedYear);
+		const y = isValidYear ? Number(selectedYear) : NaN;
+		return Number.isFinite(y) ? y : new Date().getFullYear();
+	}, [selectedYear]);
+	const [yearRange, setYearRange] = useState<{ start: number; end: number }>(() => {
+		const base = new Date().getFullYear();
+		return { start: base - 5, end: base + 5 };
+	});
+	const yearViewportRef = useRef<HTMLDivElement | null>(null);
+	const yearExtendLockRef = useRef(false);
+	const yearPendingAdjustRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		setYearRange((r) => {
+			let start = r.start;
+			let end = r.end;
+			if (baseYear < start) start = baseYear - 5;
+			if (baseYear > end) end = baseYear + 5;
+			if (start === r.start && end === r.end) return r;
+			return { start, end };
+		});
+	}, [baseYear]);
+
+	const yearOptions = useMemo(() => {
+		const years: string[] = [];
+		for (let yy = yearRange.start; yy <= yearRange.end; yy++) years.push(String(yy).padStart(4, "0"));
+		return years;
+	}, [yearRange]);
+	const monthOptions = useMemo(() => {
+		const ms: string[] = [];
+		for (let m = 1; m <= 12; m++) ms.push(String(m).padStart(2, "0"));
+		return ms;
+	}, []);
+	const selectedMonth = useMemo(() => String(month || "").slice(5, 7), [month]);
+
+	function extendYears(dir: "prev" | "next") {
+		if (yearExtendLockRef.current) return;
+		yearExtendLockRef.current = true;
+		try {
+			window.setTimeout(() => {
+				yearExtendLockRef.current = false;
+			}, 180);
+		} catch {
+			yearExtendLockRef.current = false;
+		}
+		const el = yearViewportRef.current;
+		if (dir === "prev" && el) yearPendingAdjustRef.current = el.scrollHeight;
+		setYearRange((r) => (dir === "prev" ? { start: r.start - 10, end: r.end } : { start: r.start, end: r.end + 10 }));
+	}
+
+	function onYearViewportScroll(e: UIEvent<HTMLDivElement>) {
+		const el = e.currentTarget;
+		if (!el) return;
+		if (el.scrollTop < 16) {
+			extendYears("prev");
+			return;
+		}
+		const remain = el.scrollHeight - el.scrollTop - el.clientHeight;
+		if (remain < 16) {
+			extendYears("next");
+		}
+	}
+
+	useEffect(() => {
+		const prevScrollHeight = yearPendingAdjustRef.current;
+		if (prevScrollHeight == null) return;
+		const el = yearViewportRef.current;
+		if (!el) return;
+		const delta = el.scrollHeight - prevScrollHeight;
+		el.scrollTop = el.scrollTop + delta;
+		yearPendingAdjustRef.current = null;
+	}, [yearRange]);
 
 	if (!month) {
 		return (
@@ -162,7 +305,30 @@ export default function HistoryClient() {
 				>
 					上个月
 				</button>
-				<div className="font-semibold">{month || "-"}</div>
+				<div className="flex items-center gap-2">
+					<PrettySelect
+						value={selectedYear}
+						onValueChange={(y) => {
+							const m = selectedMonth || "01";
+							if (!y || !m) return;
+							setMonth(`${y}-${m}`);
+						}}
+						options={yearOptions.map((y) => ({ value: y, label: `${y}年` }))}
+						ariaLabel="选择年份"
+						viewportRef={yearViewportRef}
+						onViewportScroll={onYearViewportScroll}
+					/>
+					<PrettySelect
+						value={selectedMonth}
+						onValueChange={(m) => {
+							const y = selectedYear || String(new Date().getFullYear());
+							if (!y || !m) return;
+							setMonth(`${y}-${m}`);
+						}}
+						options={monthOptions.map((m) => ({ value: m, label: `${m}月` }))}
+						ariaLabel="选择月份"
+					/>
+				</div>
 				<button
 					className="text-sm px-3 py-1 rounded-full border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
 					onClick={() => setMonth((m) => addMonths(m, 1))}
@@ -187,6 +353,7 @@ export default function HistoryClient() {
 					if (!c.dayNum) {
 						return <div key={idx} className="h-16 sm:h-20 rounded-xl border border-transparent" />;
 					}
+					const isTodayCell = Boolean(c.date) && String(c.date) === todayYmd;
 					const habitDone = c.habitDoneCount;
 					const habitTotal = c.habitTotalCount;
 					const taskDone = c.taskDoneCount;
@@ -199,7 +366,7 @@ export default function HistoryClient() {
 								total > 0
 									? "border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10"
 									: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
-							}`}
+							} ${isTodayCell ? "bg-violet-500/10 dark:bg-violet-500/20 border-violet-500/50" : ""}`}
 							onClick={() => {
 								const date = String(c.date);
 								if (isMobile) {
@@ -213,7 +380,7 @@ export default function HistoryClient() {
 									});
 									return;
 								}
-								router.push(`/today?date=${encodeURIComponent(date)}`);
+								router.push(`/history?date=${encodeURIComponent(date)}`);
 							}}
 						>
 							<div className="flex items-center justify-between">
@@ -261,7 +428,7 @@ export default function HistoryClient() {
 								onClick={() => {
 									const d = selectedDay?.date;
 									if (!d) return;
-									router.push(`/today?date=${encodeURIComponent(d)}`);
+									router.push(`/history?date=${encodeURIComponent(d)}`);
 								}}
 								type="button"
 							>

@@ -1,8 +1,19 @@
 import { requireUser } from "@/lib/auth-server";
 import HistoryClient from "./history-client";
+import TodayPage from "../today/page";
 
-export default async function HistoryPage() {
+export default async function HistoryPage({
+	searchParams,
+}: {
+	searchParams?: Promise<{ date?: string | string[] }>;
+}) {
 	await requireUser();
+	const sp = searchParams ? await searchParams : undefined;
+	const raw = sp?.date;
+	const dateParam = Array.isArray(raw) ? raw[0] : raw;
+	if (typeof dateParam === "string" && dateParam) {
+		return <TodayPage searchParams={Promise.resolve({ date: dateParam })} showDatePicker={true} />;
+	}
 	return (
 		<div className="space-y-6">
 			<div>
