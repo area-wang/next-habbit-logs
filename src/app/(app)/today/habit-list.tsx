@@ -25,7 +25,6 @@ export default function HabitList({
 	const [items, setItems] = useState<Habit[]>(habits);
 	const initialSet = useMemo(() => new Set(checkedHabitIds), [checkedHabitIds]);
 	const [checked, setChecked] = useState(initialSet);
-	const [loadingId, setLoadingId] = useState<string | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [editDescription, setEditDescription] = useState("");
@@ -78,35 +77,49 @@ export default function HabitList({
 	}, [searchParams]);
 
 	async function toggle(habitId: string) {
-		const nextSet = new Set(checked);
+		const prevSet = checked;
+		const nextSet = new Set(prevSet);
 		const isChecked = nextSet.has(habitId);
-		setLoadingId(habitId);
+		if (isChecked) nextSet.delete(habitId);
+		else nextSet.add(habitId);
+
+		setChecked(nextSet);
+		try {
+			if (typeof window !== "undefined") {
+				window.dispatchEvent(
+					new CustomEvent("habit-checkin-changed", {
+						detail: { habitId, checked: nextSet.has(habitId), date },
+					}),
+				);
+			}
+		} catch {
+			// ignore
+		}
+
 		try {
 			if (isChecked) {
 				await fetch(`/api/habits/${habitId}/checkin?date=${encodeURIComponent(date)}`, { method: "DELETE" });
-				nextSet.delete(habitId);
 			} else {
 				await fetch(`/api/habits/${habitId}/checkin`, {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify({ date }),
 				});
-				nextSet.add(habitId);
 			}
-			setChecked(nextSet);
+		} catch (err) {
+			console.error(err);
+			setChecked(prevSet);
 			try {
 				if (typeof window !== "undefined") {
 					window.dispatchEvent(
 						new CustomEvent("habit-checkin-changed", {
-							detail: { habitId, checked: nextSet.has(habitId), date },
+							detail: { habitId, checked: prevSet.has(habitId), date },
 						}),
 					);
 				}
 			} catch {
 				// ignore
 			}
-		} finally {
-			setLoadingId(null);
 		}
 	}
 
@@ -206,12 +219,10 @@ export default function HabitList({
 									type="checkbox"
 									checked={isChecked}
 									onChange={() => toggle(h.id)}
-									disabled={loadingId === h.id}
 									className="mt-1"
 								/>
 								<div className="min-w-0 flex-1">
 									<div className={`font-medium break-words whitespace-normal ${isChecked ? "line-through opacity-90" : ""}`}>{h.title}</div>
-									{loadingId === h.id ? <div className="text-xs opacity-70 mt-1">...</div> : null}
 									{h.description ? (
 										<div className={`text-sm mt-1 ${isChecked ? "opacity-90" : "opacity-70"}`}>{h.description}</div>
 									) : null}
