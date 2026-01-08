@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
 
 	const title = body?.title ? String(body.title).trim() : "";
 	if (!title) return badRequest("title is required");
+	if (title.length > 50) return badRequest("title must be <= 50 chars");
 
 	const scopeType = body?.scopeType ? String(body.scopeType) : "day";
 	const scopeKey = body?.scopeKey ? String(body.scopeKey) : "";

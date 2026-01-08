@@ -201,7 +201,7 @@ export default function HabitList({
 						}`}
 					>
 						<div className="flex items-start justify-between gap-4">
-							<label className="flex items-start gap-3 cursor-pointer flex-1">
+							<label className="flex items-start gap-3 cursor-pointer flex-1 min-w-0">
 								<input
 									type="checkbox"
 									checked={isChecked}
@@ -210,16 +210,14 @@ export default function HabitList({
 									className="mt-1"
 								/>
 								<div className="min-w-0 flex-1">
-									<div className="flex items-center justify-between gap-4">
-										<div className={`font-medium truncate ${isChecked ? "line-through opacity-90" : ""}`}>{h.title}</div>
-										{loadingId === h.id ? <div className="text-xs opacity-70">...</div> : null}
-									</div>
+									<div className={`font-medium break-words whitespace-normal ${isChecked ? "line-through opacity-90" : ""}`}>{h.title}</div>
+									{loadingId === h.id ? <div className="text-xs opacity-70 mt-1">...</div> : null}
 									{h.description ? (
 										<div className={`text-sm mt-1 ${isChecked ? "opacity-90" : "opacity-70"}`}>{h.description}</div>
 									) : null}
 								</div>
 							</label>
-							<div className="flex items-center gap-2">
+							<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 								{!isChecked || habitDailyNotesById[h.id] ? (
 									<button
 										className={`h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer ${
@@ -262,8 +260,9 @@ export default function HabitList({
 								<input
 									className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 									value={editTitle}
-									onChange={(e) => setEditTitle(e.target.value)}
+									onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
 									placeholder="标题"
+									maxLength={50}
 								/>
 								<textarea
 									className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"

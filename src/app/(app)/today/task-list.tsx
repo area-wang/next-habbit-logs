@@ -528,10 +528,29 @@ export default function TaskList({
 		setEditStartHHMM(minToHHMM(task.startMin));
 		setEditEndHHMM(minToHHMM(task.endMin));
 		setEditRemindBeforeMin(task.remindBeforeMin == null ? 5 : Number(task.remindBeforeMin));
+		if (typeof window !== "undefined") {
+			let tries = 0;
+			function esc(v: string) {
+				try {
+					return (window as any).CSS?.escape ? (window as any).CSS.escape(v) : v.replace(/"/g, "\\\"");
+				} catch {
+					return v;
+				}
+			}
+			function tryScroll() {
+				const el = document.querySelector(`[data-task-id=\"${esc(task.id)}\"]`) as HTMLElement | null;
+				if (el) {
+					el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+					return;
+				}
+				if (tries++ < 12) window.requestAnimationFrame(tryScroll);
+			}
+			window.requestAnimationFrame(tryScroll);
+		}
 	}
 
 	async function saveEdit(task: Task) {
-		const title = String(editTitle).trim();
+		const title = String(editTitle).trim().slice(0, 50);
 		if (!title) return;
 		const startMin = hhmmToMin(editStartHHMM);
 		const endMin = hhmmToMin(editEndHHMM);
@@ -562,7 +581,8 @@ export default function TaskList({
 	}
 
 	async function create() {
-		if (!title.trim()) return;
+		const safeTitle = String(title).trim().slice(0, 50);
+		if (!safeTitle) return;
 		setLoading(true);
 		try {
 			const startMin = hhmmToMin(startHHMM);
@@ -573,7 +593,7 @@ export default function TaskList({
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
-					title,
+					title: safeTitle,
 					description: desc ? desc : null,
 					scopeType: "day",
 					scopeKey: date,
@@ -593,7 +613,7 @@ export default function TaskList({
 					setTasks((prev) => [
 						{
 							id,
-							title: title.trim(),
+							title: safeTitle,
 							description: desc ? desc : null,
 							status: "todo",
 							startMin,
@@ -815,7 +835,8 @@ export default function TaskList({
 					className="flex-1 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 					placeholder={isHistoryMode ? "新增一个任务..." : "新增一个今日任务..."}
 					value={title}
-					onChange={(e) => setTitle(e.target.value)}
+					onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+					maxLength={50}
 					disabled={loading}
 				/>
 				<button
@@ -864,15 +885,15 @@ export default function TaskList({
 							} ${highlightTaskId === t.id ? "ring-2 ring-violet-500/80" : ""}`}
 						>
 							<div className="flex items-start justify-between gap-4">
-								<label className="flex items-start gap-3 flex-1 cursor-pointer">
+								<label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
 									<input
 										type="checkbox"
 										checked={t.status === "done"}
 										onChange={() => toggle(t)}
 										className="mt-1"
 									/>
-									<div className="min-w-0">
-										<div className={`font-medium truncate ${t.status === "done" ? "opacity-90" : ""}`}>{t.title}</div>
+									<div className="min-w-0 flex-1">
+										<div className={`font-medium break-words whitespace-normal ${t.status === "done" ? "opacity-90" : ""}`}>{t.title}</div>
 										{t.description ? (
 											<div className={`text-sm mt-1 ${t.status === "done" ? "opacity-90" : "opacity-70"}`}>{t.description}</div>
 										) : null}
@@ -883,7 +904,7 @@ export default function TaskList({
 										) : null}
 									</div>
 								</label>
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 									{t.status !== "done" || taskDailyNotesById[t.id] ? (
 										<button
 											className={`h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer ${
@@ -941,8 +962,9 @@ export default function TaskList({
 									<input
 										className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 										value={editTitle}
-										onChange={(e) => setEditTitle(e.target.value)}
+										onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
 										placeholder="标题"
+										maxLength={50}
 									/>
 									<textarea
 										className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
@@ -964,13 +986,23 @@ export default function TaskList({
 											placeholder="提前提醒（分钟）"
 										/>
 									</div>
-									<button
-										className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
-										onClick={() => saveEdit(t)}
-										disabled={!String(editTitle).trim()}
-									>
-										保存
-									</button>
+									<div className="flex items-center gap-2">
+										<button
+											className="flex-1 h-10 px-3 rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors"
+											onClick={() => setEditingId(null)}
+											type="button"
+										>
+											取消
+										</button>
+										<button
+											className="flex-1 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
+											onClick={() => saveEdit(t)}
+											disabled={!String(editTitle).trim()}
+											type="button"
+										>
+											保存
+										</button>
+									</div>
 								</div>
 							) : null}
 						</div>

@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
 	};
 	const title = body?.title ? String(body.title).trim() : "";
 	if (!title) return badRequest("title is required");
+	if (title.length > 50) return badRequest("title must be <= 50 chars");
 
 	const frequencyType = body?.frequencyType ? String(body.frequencyType) : "daily";
 	const frequencyN = body?.frequencyN == null ? null : Number(body.frequencyN);

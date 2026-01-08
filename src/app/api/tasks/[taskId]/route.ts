@@ -44,6 +44,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 	if (body?.title != null) {
 		const title = String(body.title).trim();
 		if (!title) return badRequest("title cannot be empty");
+		if (title.length > 50) return badRequest("title must be <= 50 chars");
 		updates.push("title = ?");
 		binds.push(title);
 	}

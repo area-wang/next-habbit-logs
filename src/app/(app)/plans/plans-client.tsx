@@ -216,7 +216,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 						className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 						placeholder="例如：写 1 页周总结"
 						value={title}
-						onChange={(e) => setTitle(e.target.value)}
+						onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+						maxLength={50}
 						disabled={loading}
 					/>
 					<textarea
@@ -275,15 +276,15 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 							}`}
 						>
 							<div className="flex items-start justify-between gap-4">
-								<label className="flex items-start gap-3 flex-1 cursor-pointer">
+								<label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
 									<input
 										type="checkbox"
 										checked={t.status === "done"}
 										onChange={() => toggleDone(t)}
 										className="mt-1"
 									/>
-									<div className="min-w-0">
-										<div className={`font-medium truncate ${t.status === "done" ? "line-through opacity-90" : ""}`}>{t.title}</div>
+									<div className="min-w-0 flex-1">
+										<div className={`font-medium break-words whitespace-normal ${t.status === "done" ? "line-through opacity-90" : ""}`}>{t.title}</div>
 										{t.description ? <div className={`text-sm mt-1 ${t.status === "done" ? "opacity-90" : "opacity-70"}`}>{t.description}</div> : null}
 										{t.start_min != null || t.end_min != null ? (
 											<div className={`text-sm mt-1 ${t.status === "done" ? "opacity-90" : "opacity-70"}`}>
@@ -292,7 +293,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										) : null}
 									</div>
 								</label>
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
 										onClick={() => (editingId === t.id ? setEditingId(null) : beginEdit(t))}
@@ -331,8 +332,9 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 									<input
 										className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 										value={editTitle}
-										onChange={(e) => setEditTitle(e.target.value)}
+										onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
 										placeholder="标题"
+										maxLength={50}
 									/>
 									<textarea
 										className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"

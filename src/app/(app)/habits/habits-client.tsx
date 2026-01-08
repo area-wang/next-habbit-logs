@@ -304,11 +304,12 @@ export default function HabitsClient() {
 		setError(null);
 		setCreating(true);
 		try {
+			const safeTitle = String(title).trim().slice(0, 50);
 			const res = await fetch("/api/habits", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
-					title,
+					title: safeTitle,
 					description: description || null,
 					frequencyType: "daily",
 					startDate: startDate.trim() ? startDate.trim() : null,
@@ -416,7 +417,7 @@ export default function HabitsClient() {
 	}
 
 	async function saveEdit(h: Habit) {
-		const title = String(editTitle).trim();
+		const title = String(editTitle).trim().slice(0, 50);
 		if (!title) return;
 		const desc = String(editDescription || "").trim();
 		const startDate = String(editStartDate || "").trim();
@@ -480,7 +481,8 @@ export default function HabitsClient() {
 						className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 						placeholder="例如：英语 20 分钟"
 						value={title}
-						onChange={(e) => setTitle(e.target.value)}
+						onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+						maxLength={50}
 						disabled={creating}
 					/>
 					<input
@@ -526,12 +528,12 @@ export default function HabitsClient() {
 					habits.map((h) => (
 						<div key={h.id} data-habit-id={h.id} className="rounded-xl border border-black/10 dark:border-white/15 px-4 py-3">
 							<div className="flex items-start justify-between gap-3">
-								<div className="min-w-0">
-									<div className="font-medium truncate">{h.title}</div>
+								<div className="min-w-0 flex-1">
+									<div className="font-medium break-words whitespace-normal">{h.title}</div>
 									{h.description ? <div className="text-sm opacity-70 mt-1">{h.description}</div> : null}
 									<div className="text-sm opacity-70 mt-1">生效：{h.start_date}{h.end_date ? ` ~ ${h.end_date}` : ""}</div>
 								</div>
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
 										onClick={() => (editingId === h.id ? setEditingId(null) : beginEdit(h))}
@@ -572,8 +574,9 @@ export default function HabitsClient() {
 									<input
 										className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
 										value={editTitle}
-										onChange={(e) => setEditTitle(e.target.value)}
+										onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
 										placeholder="标题"
+										maxLength={50}
 									/>
 									<textarea
 										className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
