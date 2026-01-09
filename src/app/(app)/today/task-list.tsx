@@ -361,6 +361,13 @@ export default function TaskList({
 					const reg = await navigator.serviceWorker.getRegistration();
 					const sub = reg ? await reg.pushManager.getSubscription() : null;
 					setPushNotifEnabled((prev) => (sub ? true : prev));
+					if (sub) {
+						await fetch("/api/push/subscribe", {
+							method: "POST",
+							headers: { "content-type": "application/json" },
+							body: JSON.stringify({ subscription: sub, tzOffsetMin }),
+						}).catch(() => undefined);
+					}
 				} catch {
 					// ignore
 				}

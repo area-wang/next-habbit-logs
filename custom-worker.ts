@@ -26,6 +26,7 @@ async function runScheduled(env: CloudflareEnv) {
 	const lookbackMs = 30_000;
 	const lookaheadMs = 90_000;
 	const appOrigin = String(env.APP_ORIGIN || "").replace(/\/$/, "");
+	const subscriptionStaleTtlMs = 1 * 24 * 60 * 60 * 1000;
 
 	const okSubs = await hasTable(db, "push_subscriptions");
 	const okReminders = await hasTable(db, "reminders");
@@ -40,6 +41,16 @@ async function runScheduled(env: CloudflareEnv) {
 				push_deliveries: okDeliveries,
 			},
 		};
+	}
+
+	try {
+		const staleBefore = now - subscriptionStaleTtlMs;
+		await db
+			.prepare("UPDATE push_subscriptions SET disabled_at = ?, updated_at = ? WHERE disabled_at IS NULL AND updated_at < ?")
+			.bind(now, now, staleBefore)
+			.run();
+	} catch {
+		// ignore
 	}
 
 	const subsRes = await db
@@ -180,6 +191,16 @@ async function runScheduled(env: CloudflareEnv) {
 					.prepare("UPDATE push_deliveries SET status = ?, updated_at = ? WHERE id = ?")
 					.bind(status, Date.now(), deliveryId)
 					.run();
+				if (!res.ok && (res.status === 404 || res.status === 410)) {
+					try {
+						await db
+							.prepare("UPDATE push_subscriptions SET disabled_at = ?, updated_at = ? WHERE id = ?")
+							.bind(Date.now(), Date.now(), subscriptionId)
+							.run();
+					} catch {
+						// ignore
+					}
+				}
 			} catch {
 				totalSendErr += 1;
 				try {
