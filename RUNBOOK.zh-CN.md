@@ -10,6 +10,11 @@
 - 数据库：Cloudflare D1（SQLite）
 - 鉴权：基于 `sessions` 表 + `session` HttpOnly cookie
 
+## 1.1 提醒能力（前台 vs 后台）
+
+- **前台提醒**：页面打开时，使用 `setTimeout + Notification` 调度（不后台常驻）
+- **后台提醒**：页面关闭/后台也能提醒，依赖 **Web Push + Cloudflare Workers Cron Trigger**
+
 ## 2. 目录结构（关键部分）
 
 - `src/app/`：Next.js App Router
@@ -27,6 +32,18 @@
 
 - **D1 数据库绑定**：`DB`
 - **会话密钥**：`SESSION_SECRET`
+
+#### 3.1.1 后台 Push 提醒相关（必须）
+
+后台提醒需要 Web Push 的 VAPID 配置（Worker 运行时读取）：
+
+- **VAPID subject**：`VAPID_SUBJECT`（例如 `mailto:you@example.com` 或 `https://your.domain`）
+- **VAPID 公钥**：`VAPID_SERVER_PUBLIC_KEY`（Base64URL）
+- **VAPID 私钥**：`VAPID_SERVER_PRIVATE_KEY`（Base64URL）
+
+并且建议配置：
+
+- **站点 Origin**：`APP_ORIGIN`（例如 `https://your-app.workers.dev`），用于推送通知点击跳转
 
 对应类型定义见 `env.d.ts`，其中包含：
 
@@ -49,6 +66,21 @@
 - **开发环境**：使用 `.dev.vars`
 - **生产环境**：使用 `wrangler secret put` 配置 secret（不要把 secret 写进仓库）
 
+如果要在开发环境体验“后台提醒”，也需要在 `.dev.vars` 里提供 VAPID 相关变量。
+
+#### 3.2.1 生成 VAPID Keys
+
+可以用 `web-push` CLI 生成（仅用于生成 key，不会写入仓库）：
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+输出会包含 `Public Key` 与 `Private Key`，把它们分别填入：
+
+- `VAPID_SERVER_PUBLIC_KEY`
+- `VAPID_SERVER_PRIVATE_KEY`
+
 ## 4. 开发环境运行（本地）
 
 ### 4.1 安装依赖
@@ -63,6 +95,10 @@ npm install
 
 - `migrations/0001_init.sql`
 - `migrations/0002_plans_tasks.sql`
+- `migrations/0003_push_reminders.sql`
+- `migrations/0004_reminders_unique.sql`
+- `migrations/0005_daily_item_notes.sql`
+- `migrations/0006_habits_date_range.sql`
 
 #### 方式 A：直接用 `wrangler d1 execute`（推荐）
 
@@ -73,6 +109,10 @@ npm install
 ```bash
 npx wrangler d1 execute habit_database --local --file=./migrations/0001_init.sql
 npx wrangler d1 execute habit_database --local --file=./migrations/0002_plans_tasks.sql
+npx wrangler d1 execute habit_database --local --file=./migrations/0003_push_reminders.sql
+npx wrangler d1 execute habit_database --local --file=./migrations/0004_reminders_unique.sql
+npx wrangler d1 execute habit_database --local --file=./migrations/0005_daily_item_notes.sql
+npx wrangler d1 execute habit_database --local --file=./migrations/0006_habits_date_range.sql
 ```
 
 - `--local` 会在本地创建/使用 D1 的本地数据库文件（由 wrangler 管理）。
@@ -89,6 +129,10 @@ npx wrangler d1 execute habit_database --local --file=./migrations/0002_plans_ta
 ```bash
 npx wrangler d1 execute habit_database --file=./migrations/0001_init.sql
 npx wrangler d1 execute habit_database --file=./migrations/0002_plans_tasks.sql
+npx wrangler d1 execute habit_database --file=./migrations/0003_push_reminders.sql
+npx wrangler d1 execute habit_database --file=./migrations/0004_reminders_unique.sql
+npx wrangler d1 execute habit_database --file=./migrations/0005_daily_item_notes.sql
+npx wrangler d1 execute habit_database --file=./migrations/0006_habits_date_range.sql
 ```
 
 ### 4.3 配置开发环境变量
@@ -97,6 +141,10 @@ npx wrangler d1 execute habit_database --file=./migrations/0002_plans_tasks.sql
 
 ```ini
 SESSION_SECRET=change-me-in-dev
+APP_ORIGIN=http://localhost:8787
+VAPID_SUBJECT=mailto:dev@example.com
+VAPID_SERVER_PUBLIC_KEY=YOUR_VAPID_PUBLIC_KEY
+VAPID_SERVER_PRIVATE_KEY=YOUR_VAPID_PRIVATE_KEY
 ```
 
 > D1 的 `DB` 绑定来自 `wrangler.jsonc` 的 `d1_databases` 配置，不需要在 `.dev.vars` 里声明。
@@ -115,6 +163,19 @@ npm run dev
 
 - `next.config.ts` 内调用了 `initOpenNextCloudflareForDev()`，用于在 `next dev` 下支持 `getCloudflareContext()`。
 - 如果你同时启用了 PWA/Service Worker，开发环境建议不要注册 SW（本项目已处理 dev 下自动卸载 SW），否则容易出现资源缓存导致的 hydration mismatch。
+
+#### 后台提醒（开发）如何验证
+
+`next dev` 下 **不会触发** Cloudflare Worker 的 `scheduled()`，因此后台提醒需要用 Wrangler/Worker 方式运行。
+
+- 方式 A（推荐）：
+  - `npm run preview`
+  - 然后用 Cloudflare Dashboard 配置 Cron（或生产环境测试）
+
+- 方式 B（本地触发 scheduled，用于调试）：
+  - `npm install`
+  - `npm run preview`（生成 `.open-next`）
+  - 另开终端运行 `npx wrangler dev --test-scheduled`
 
 ## 5. 生产环境运行（两种方式）
 
@@ -147,13 +208,22 @@ npx wrangler login
 
 ```bash
 npx wrangler secret put SESSION_SECRET
+npx wrangler secret put VAPID_SUBJECT
+npx wrangler secret put VAPID_SERVER_PUBLIC_KEY
+npx wrangler secret put VAPID_SERVER_PRIVATE_KEY
 ```
+
+`APP_ORIGIN` 建议配置为变量（非 secret），可在 Cloudflare Dashboard 或 wrangler 配置中设置。
 
 #### 5.2.3 初始化/迁移远端 D1
 
 ```bash
 npx wrangler d1 execute habit_database --file=./migrations/0001_init.sql
 npx wrangler d1 execute habit_database --file=./migrations/0002_plans_tasks.sql
+npx wrangler d1 execute habit_database --file=./migrations/0003_push_reminders.sql
+npx wrangler d1 execute habit_database --file=./migrations/0004_reminders_unique.sql
+npx wrangler d1 execute habit_database --file=./migrations/0005_daily_item_notes.sql
+npx wrangler d1 execute habit_database --file=./migrations/0006_habits_date_range.sql
 ```
 
 #### 5.2.4 构建并部署
@@ -174,6 +244,13 @@ npm run deploy
 - 打开部署 URL
 - 注册账号/登录
 - 在 Today/Plans 创建任务，刷新页面确认 session cookie 正常
+
+后台提醒验证：
+
+- 在 Today 页面开启“提醒”（会触发浏览器 Push 订阅并写入 `push_subscriptions`）
+- 创建一个 **待办** 任务并设置开始时间 + 提前提醒分钟
+- 等待 Cloudflare Cron 每分钟触发（或手动触发 scheduled 进行调试）
+- 预期：到点后即使页面关闭也能收到系统通知；点击通知会跳转到对应任务/习惯
 
 ## 6. 数据库表说明（摘要）
 
@@ -203,13 +280,23 @@ npm run deploy
 
 ### 7.2 通知提醒不生效
 
-提醒目前是“页面打开时用 `setTimeout` 调度 Notification”，不是后台常驻。
+提醒分为两类：
+
+- 前台提醒：页面打开时用 `setTimeout` 调度 Notification
+- 后台提醒：依赖 Web Push + Worker Cron
 
 验证方式：
 
 - 确认浏览器通知权限为 granted
 - 任务必须为 todo 且设置开始时间
 - 提醒触发时间必须在未来
+
+后台提醒额外检查：
+
+- 是否已经执行了 `0003_push_reminders.sql`
+- 是否在页面开启提醒后成功写入 `push_subscriptions`
+- Cloudflare Worker 是否启用了 Cron Trigger（`wrangler.jsonc` 已配置 `* * * * *`）
+- 是否配置了 `VAPID_*` 与 `APP_ORIGIN`
 
 ## 8. 命令速查
 

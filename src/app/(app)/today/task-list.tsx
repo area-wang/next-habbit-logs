@@ -83,7 +83,9 @@ export default function TaskList({
 	const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
 	const [notifEnabled, setNotifEnabled] = useState(false);
 	const [appNotifEnabled, setAppNotifEnabled] = useState(false);
+	const [pushNotifEnabled, setPushNotifEnabled] = useState(false);
 	const [supportsNotification, setSupportsNotification] = useState(false);
+	const [supportsPush, setSupportsPush] = useState(false);
 	const [notifStatus, setNotifStatus] = useState<
 		"unsupported" | "unknown" | "default" | "prompting" | "granted" | "denied" | "error"
 	>("unknown");
@@ -114,7 +116,8 @@ export default function TaskList({
 	const habitTodoCount = useMemo(() => {
 		return (habits || []).filter((h) => !checkedHabitIdSet.has(h.id)).length;
 	}, [habits, checkedHabitIdSet]);
-	const effectiveNotifEnabled = notifEnabled && appNotifEnabled;
+	const effectiveFrontNotifEnabled = notifEnabled && appNotifEnabled;
+	const effectivePushNotifEnabled = notifEnabled && pushNotifEnabled;
 
 	useEffect(() => {
 		setTasks(initialTasks);
@@ -248,7 +251,7 @@ export default function TaskList({
 	}, [habitRemindersByHabitId]);
 
 	useEffect(() => {
-		if (!effectiveNotifEnabled) return;
+		if (!effectiveFrontNotifEnabled) return;
 		if (typeof window === "undefined") return;
 		const hs = habits || [];
 		if (hs.length === 0) return;
@@ -290,7 +293,7 @@ export default function TaskList({
 		return () => {
 			canceled = true;
 		};
-	}, [effectiveNotifEnabled, habits]);
+	}, [effectiveFrontNotifEnabled, habits]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -326,6 +329,8 @@ export default function TaskList({
 		if (typeof window === "undefined") return;
 		const ok = "Notification" in window;
 		setSupportsNotification(ok);
+		const pushOk = "serviceWorker" in navigator && "PushManager" in window;
+		setSupportsPush(pushOk);
 		if (!ok) {
 			setNotifStatus("unsupported");
 			return;
@@ -342,6 +347,25 @@ export default function TaskList({
 		} catch {
 			setAppNotifEnabled(granted);
 		}
+		try {
+			const raw = window.localStorage.getItem("push_notif_enabled");
+			if (raw === "1") setPushNotifEnabled(true);
+			else if (raw === "0") setPushNotifEnabled(false);
+			else setPushNotifEnabled(false);
+		} catch {
+			setPushNotifEnabled(false);
+		}
+		if (pushOk && granted) {
+			void (async () => {
+				try {
+					const reg = await navigator.serviceWorker.getRegistration();
+					const sub = reg ? await reg.pushManager.getSubscription() : null;
+					setPushNotifEnabled((prev) => (sub ? true : prev));
+				} catch {
+					// ignore
+				}
+			})();
+		}
 	}, []);
 
 	useEffect(() => {
@@ -354,7 +378,16 @@ export default function TaskList({
 	}, [appNotifEnabled]);
 
 	useEffect(() => {
-		if (!effectiveNotifEnabled) {
+		if (typeof window === "undefined") return;
+		try {
+			window.localStorage.setItem("push_notif_enabled", pushNotifEnabled ? "1" : "0");
+		} catch {
+			// ignore
+		}
+	}, [pushNotifEnabled]);
+
+	useEffect(() => {
+		if (!effectiveFrontNotifEnabled) {
 			setScheduleSummary(null);
 			return;
 		}
@@ -478,9 +511,9 @@ export default function TaskList({
 			timersRef.current.forEach((id) => window.clearTimeout(id));
 			timersRef.current = [];
 		};
-	}, [date, tzOffsetMin, effectiveNotifEnabled, tasks, habits, habitRemindersLiveByHabitId, checkedHabitIdSet, isHistoryMode]);
+	}, [date, tzOffsetMin, effectiveFrontNotifEnabled, tasks, habits, habitRemindersLiveByHabitId, checkedHabitIdSet, isHistoryMode]);
 
-	async function enableNotifications() {
+	async function requestNotificationPermission() {
 		if (typeof window === "undefined") return;
 		setNotifMessage(null);
 		if (!("Notification" in window)) {
@@ -493,40 +526,90 @@ export default function TaskList({
 			const perm = await Notification.requestPermission();
 			const ok = perm === "granted";
 			setNotifEnabled(ok);
-			setAppNotifEnabled(ok);
 			setNotifStatus(ok ? "granted" : perm === "denied" ? "denied" : "default");
 			if (ok) {
 				try {
-					new Notification("提醒已开启", { body: "将在设置时间弹出系统通知" });
+					new Notification("通知权限已开启", { body: "你可以按需开启前台/后台提醒" });
 				} catch {
-					setNotifMessage("已开启，但当前浏览器阻止了测试通知（不影响后续提醒）");
+					// ignore
 				}
 			} else if (perm === "denied") {
 				setNotifMessage("通知权限被拒绝：请在浏览器设置中允许通知");
+			} else {
+				setNotifMessage("通知权限未授予：请在弹窗中点击“允许”，或在浏览器设置中开启通知");
 			}
+			return ok;
 		} catch {
 			setNotifStatus("error");
 			setNotifEnabled(false);
-			setAppNotifEnabled(false);
 			setNotifMessage("请求通知权限失败（可能是非 HTTPS 或浏览器限制）");
+			return false;
 		}
 	}
 
-	async function toggleNotifications() {
+	async function toggleFrontNotifications() {
 		if (typeof window === "undefined") return;
 		setNotifMessage(null);
 		if (!supportsNotification) return;
 		if (notifStatus === "prompting") return;
-		if (effectiveNotifEnabled) {
+		if (effectiveFrontNotifEnabled) {
 			setAppNotifEnabled(false);
-			setNotifMessage("已关闭前台提醒（浏览器通知权限仍为允许）");
+			setNotifMessage("已关闭前台提醒（页面打开时不再定时弹窗）");
 			return;
 		}
 		if (notifEnabled) {
 			setAppNotifEnabled(true);
+			setNotifMessage("已开启前台提醒（页面打开时生效）");
 			return;
 		}
-		await enableNotifications();
+		const ok = await requestNotificationPermission();
+		setAppNotifEnabled(!!ok);
+		if (ok) setNotifMessage("已开启前台提醒（页面打开时生效）");
+		else setNotifMessage((m) => m || "未开启前台提醒：需要先授予通知权限");
+	}
+
+	async function togglePushNotifications() {
+		if (typeof window === "undefined") return;
+		setNotifMessage(null);
+		if (!supportsNotification) return;
+		if (!supportsPush) {
+			setNotifMessage("当前环境不支持后台推送（需要 Service Worker + PushManager）");
+			return;
+		}
+		if (notifStatus === "prompting") return;
+		if (effectivePushNotifEnabled) {
+			setNotifMessage("正在关闭后台推送...");
+			setPushNotifEnabled(false);
+			await disablePushSubscription();
+			setNotifMessage("已关闭后台推送（页面关闭时将不会提醒）");
+			return;
+		}
+		if (notifEnabled) {
+			setNotifMessage("正在开启后台推送...");
+			try {
+				await ensurePushSubscribed();
+				setPushNotifEnabled(true);
+				setNotifMessage("已开启后台推送（页面关闭也会提醒）");
+			} catch (e) {
+				setPushNotifEnabled(false);
+				setNotifMessage(`后台推送订阅失败：${formatErr(e)}`);
+			}
+			return;
+		}
+		const ok = await requestNotificationPermission();
+		if (!ok) {
+			setPushNotifEnabled(false);
+			setNotifMessage((m) => m || "未开启后台推送：需要先授予通知权限");
+			return;
+		}
+		try {
+			await ensurePushSubscribed();
+			setPushNotifEnabled(true);
+			setNotifMessage("已开启后台推送（页面关闭也会提醒）");
+		} catch (e) {
+			setPushNotifEnabled(false);
+			setNotifMessage(`后台推送订阅失败：${formatErr(e)}`);
+		}
 	}
 
 	function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -543,6 +626,84 @@ export default function TaskList({
 				},
 			);
 		});
+	}
+
+	function formatErr(e: unknown) {
+		try {
+			const anyE = e as any;
+			const name = anyE?.name ? String(anyE.name) : "";
+			const msg = anyE?.message ? String(anyE.message) : String(e);
+			return name ? `${name}: ${msg}` : msg;
+		} catch {
+			return "unknown_error";
+		}
+	}
+
+	function base64UrlToUint8Array(base64Url: string) {
+		const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
+		const base64 = (base64Url + padding).replace(/-/g, "+").replace(/_/g, "/");
+		const raw = atob(base64);
+		const out = new Uint8Array(raw.length);
+		for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+		return out;
+	}
+
+	async function getVapidPublicKey() {
+		const res = await fetch("/api/push/public-key", { method: "GET" });
+		if (!res.ok) throw new Error("failed_to_get_vapid_public_key");
+		const data = (await res.json().catch(() => null)) as any;
+		const key = String(data?.publicKey || "").trim();
+		if (!key) throw new Error("missing_vapid_public_key");
+		if (!/^[A-Za-z0-9_-]+$/.test(key)) throw new Error("invalid_vapid_public_key_format");
+		return key;
+	}
+
+	async function ensurePushSubscribed() {
+		if (typeof window === "undefined") return;
+		if (!("serviceWorker" in navigator)) throw new Error("service_worker_unsupported");
+		if (!("PushManager" in window)) throw new Error("push_manager_unsupported");
+		if (!(window as any).isSecureContext) throw new Error("not_secure_context");
+		const reg = await withTimeout(getReadyServiceWorker(), 15_000, "service_worker_ready_timeout");
+		let sub = await reg.pushManager.getSubscription();
+		if (!sub) {
+			const publicKey = await getVapidPublicKey();
+			const appKey = base64UrlToUint8Array(publicKey);
+			if (appKey.length !== 65) throw new Error(`invalid_vapid_public_key_length:${appKey.length}`);
+			try {
+				sub = await withTimeout(
+					reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey }),
+					15_000,
+					"push_subscribe_timeout",
+				);
+			} catch (e) {
+				throw new Error(`push_subscribe_failed:${formatErr(e)}`);
+			}
+		}
+		await fetch("/api/push/subscribe", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ subscription: sub, tzOffsetMin }),
+		});
+		return sub;
+	}
+
+	async function disablePushSubscription() {
+		if (typeof window === "undefined") return;
+		if (!("serviceWorker" in navigator)) return;
+		try {
+			const reg = await navigator.serviceWorker.getRegistration();
+			if (!reg) return;
+			const sub = await reg.pushManager.getSubscription();
+			if (!sub) return;
+			await fetch("/api/push/unsubscribe", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ endpoint: sub.endpoint }),
+			});
+			await sub.unsubscribe().catch(() => undefined);
+		} catch {
+			// ignore
+		}
 	}
 
 	async function getReadyServiceWorker() {
@@ -834,23 +995,28 @@ export default function TaskList({
 			<div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-color)] px-4 py-3">
 				<div className="text-sm">
 					<div className="font-medium">提醒</div>
-					<div className="text-xs opacity-70 mt-1">开启后，会在任务开始前 N 分钟弹出系统通知。</div>
+					<div className="text-xs opacity-70 mt-1">前台提醒：页面打开时用定时器调度；后台推送：页面关闭也可提醒。</div>
 					<div className="text-xs mt-1 opacity-80">
 						{!supportsNotification
-							? "状态：不支持"
+							? "通知权限：不支持"
 							: notifStatus === "unknown"
-								? "状态：检查中..."
+								? "通知权限：检查中..."
 								: notifStatus === "prompting"
-									? "状态：正在请求权限..."
+									? "通知权限：正在请求..."
 									: notifStatus === "granted"
-										? effectiveNotifEnabled
-											? "状态：已开启"
-											: "状态：已关闭"
+										? "通知权限：已允许"
 										: notifStatus === "denied"
-											? "状态：被拒绝"
+											? "通知权限：被拒绝"
 											: notifStatus === "error"
-												? "状态：失败"
-												: "状态：未开启"}
+												? "通知权限：失败"
+												: "通知权限：未开启"}
+					</div>
+					<div className="text-xs mt-1 opacity-80">
+						前台提醒：{effectiveFrontNotifEnabled ? "已开启" : "已关闭"}
+					</div>
+					<div className="text-xs mt-1 opacity-80">
+						后台推送：{effectivePushNotifEnabled ? "已开启" : "已关闭"}
+						{!supportsPush ? "（当前环境不支持）" : ""}
 					</div>
 					{!supportsNotification ? <div className="text-xs mt-1 opacity-80">当前浏览器不支持系统通知</div> : null}
 					{notifMessage ? <div className="text-xs mt-1 opacity-80">{notifMessage}</div> : null}
@@ -859,20 +1025,39 @@ export default function TaskList({
 				<div className="flex flex-shrink-0 flex-col gap-2 items-end">
 					<button
 						className={`flex-shrink-0 text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-							effectiveNotifEnabled
+							effectiveFrontNotifEnabled
 								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
 								: "border-[color:var(--border-color)] hover:bg-[color:var(--surface)]"
 						}`}
-						onClick={toggleNotifications}
+						onClick={toggleFrontNotifications}
 						disabled={!supportsNotification || notifStatus === "prompting"}
 					>
 						{!supportsNotification
 							? "不支持"
 							: notifStatus === "prompting"
 								? "请求中..."
-								: effectiveNotifEnabled
-									? "关闭提醒"
-									: "开启提醒"}
+								: effectiveFrontNotifEnabled
+									? "关闭前台"
+									: "开启前台"}
+					</button>
+					<button
+						className={`flex-shrink-0 text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+							effectivePushNotifEnabled
+								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
+								: "border-[color:var(--border-color)] hover:bg-[color:var(--surface)]"
+						}`}
+						onClick={togglePushNotifications}
+						disabled={!supportsNotification || !supportsPush || notifStatus === "prompting"}
+					>
+						{!supportsNotification
+							? "不支持"
+							: !supportsPush
+								? "不可用"
+								: notifStatus === "prompting"
+									? "请求中..."
+									: effectivePushNotifEnabled
+										? "关闭后台"
+										: "开启后台"}
 					</button>
 				</div>
 			</div>
