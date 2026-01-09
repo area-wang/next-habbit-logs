@@ -213,6 +213,20 @@ async function sendPush(p: {
 	url: string;
 	topic?: string;
 }) {
+	function base64UrlEncodeBytes(bytes: Uint8Array) {
+		let s = "";
+		for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
+		const b64 = btoa(s);
+		return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+	}
+
+	async function toSafeTopic(raw: string) {
+		const data = new TextEncoder().encode(raw);
+		const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+		const short = digest.slice(0, 15);
+		return `t_${base64UrlEncodeBytes(short)}`;
+	}
+
 	const subscription: PushSubscription = {
 		endpoint: p.sub.endpoint,
 		expirationTime: p.sub.expiration_time == null ? null : Number(p.sub.expiration_time),
@@ -222,9 +236,10 @@ async function sendPush(p: {
 		},
 	};
 
+	const safeTopic = p.topic ? await toSafeTopic(p.topic) : undefined;
 	const message = {
 		data: JSON.stringify({ title: p.title, body: p.body, url: p.url }),
-		options: { topic: p.topic, ttl: 60 * 60, urgency: "high" as const },
+		options: { topic: safeTopic, ttl: 60 * 60, urgency: "high" as const },
 	};
 
 	const payload = await buildPushPayload(message as any, subscription as any, {
