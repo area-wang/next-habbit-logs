@@ -82,6 +82,7 @@ export default function TaskList({
 	const [loading, setLoading] = useState(false);
 	const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
 	const [notifEnabled, setNotifEnabled] = useState(false);
+	const [appNotifEnabled, setAppNotifEnabled] = useState(false);
 	const [supportsNotification, setSupportsNotification] = useState(false);
 	const [notifStatus, setNotifStatus] = useState<
 		"unsupported" | "unknown" | "default" | "prompting" | "granted" | "denied" | "error"
@@ -113,6 +114,7 @@ export default function TaskList({
 	const habitTodoCount = useMemo(() => {
 		return (habits || []).filter((h) => !checkedHabitIdSet.has(h.id)).length;
 	}, [habits, checkedHabitIdSet]);
+	const effectiveNotifEnabled = notifEnabled && appNotifEnabled;
 
 	useEffect(() => {
 		setTasks(initialTasks);
@@ -246,7 +248,7 @@ export default function TaskList({
 	}, [habitRemindersByHabitId]);
 
 	useEffect(() => {
-		if (!notifEnabled) return;
+		if (!effectiveNotifEnabled) return;
 		if (typeof window === "undefined") return;
 		const hs = habits || [];
 		if (hs.length === 0) return;
@@ -288,7 +290,7 @@ export default function TaskList({
 		return () => {
 			canceled = true;
 		};
-	}, [notifEnabled, habits]);
+	}, [effectiveNotifEnabled, habits]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -329,12 +331,30 @@ export default function TaskList({
 			return;
 		}
 		const perm = Notification.permission;
-		setNotifEnabled(perm === "granted");
+		const granted = perm === "granted";
+		setNotifEnabled(granted);
 		setNotifStatus(perm === "granted" ? "granted" : perm === "denied" ? "denied" : "default");
+		try {
+			const raw = window.localStorage.getItem("front_notif_enabled");
+			if (raw === "1") setAppNotifEnabled(true);
+			else if (raw === "0") setAppNotifEnabled(false);
+			else setAppNotifEnabled(granted);
+		} catch {
+			setAppNotifEnabled(granted);
+		}
 	}, []);
 
 	useEffect(() => {
-		if (!notifEnabled) {
+		if (typeof window === "undefined") return;
+		try {
+			window.localStorage.setItem("front_notif_enabled", appNotifEnabled ? "1" : "0");
+		} catch {
+			// ignore
+		}
+	}, [appNotifEnabled]);
+
+	useEffect(() => {
+		if (!effectiveNotifEnabled) {
 			setScheduleSummary(null);
 			return;
 		}
@@ -458,7 +478,7 @@ export default function TaskList({
 			timersRef.current.forEach((id) => window.clearTimeout(id));
 			timersRef.current = [];
 		};
-	}, [date, tzOffsetMin, notifEnabled, tasks, habits, habitRemindersLiveByHabitId, checkedHabitIdSet, isHistoryMode]);
+	}, [date, tzOffsetMin, effectiveNotifEnabled, tasks, habits, habitRemindersLiveByHabitId, checkedHabitIdSet, isHistoryMode]);
 
 	async function enableNotifications() {
 		if (typeof window === "undefined") return;
@@ -473,6 +493,7 @@ export default function TaskList({
 			const perm = await Notification.requestPermission();
 			const ok = perm === "granted";
 			setNotifEnabled(ok);
+			setAppNotifEnabled(ok);
 			setNotifStatus(ok ? "granted" : perm === "denied" ? "denied" : "default");
 			if (ok) {
 				try {
@@ -486,8 +507,26 @@ export default function TaskList({
 		} catch {
 			setNotifStatus("error");
 			setNotifEnabled(false);
+			setAppNotifEnabled(false);
 			setNotifMessage("请求通知权限失败（可能是非 HTTPS 或浏览器限制）");
 		}
+	}
+
+	async function toggleNotifications() {
+		if (typeof window === "undefined") return;
+		setNotifMessage(null);
+		if (!supportsNotification) return;
+		if (notifStatus === "prompting") return;
+		if (effectiveNotifEnabled) {
+			setAppNotifEnabled(false);
+			setNotifMessage("已关闭前台提醒（浏览器通知权限仍为允许）");
+			return;
+		}
+		if (notifEnabled) {
+			setAppNotifEnabled(true);
+			return;
+		}
+		await enableNotifications();
 	}
 
 	function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -804,7 +843,9 @@ export default function TaskList({
 								: notifStatus === "prompting"
 									? "状态：正在请求权限..."
 									: notifStatus === "granted"
-										? "状态：已开启"
+										? effectiveNotifEnabled
+											? "状态：已开启"
+											: "状态：已关闭"
 										: notifStatus === "denied"
 											? "状态：被拒绝"
 											: notifStatus === "error"
@@ -818,14 +859,20 @@ export default function TaskList({
 				<div className="flex flex-shrink-0 flex-col gap-2 items-end">
 					<button
 						className={`flex-shrink-0 text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-							notifEnabled
+							effectiveNotifEnabled
 								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
 								: "border-[color:var(--border-color)] hover:bg-[color:var(--surface)]"
 						}`}
-						onClick={enableNotifications}
-						disabled={!supportsNotification || notifEnabled || notifStatus === "prompting"}
+						onClick={toggleNotifications}
+						disabled={!supportsNotification || notifStatus === "prompting"}
 					>
-						{!supportsNotification ? "不支持" : notifEnabled ? "已开启" : notifStatus === "prompting" ? "请求中..." : "前台提醒"}
+						{!supportsNotification
+							? "不支持"
+							: notifStatus === "prompting"
+								? "请求中..."
+								: effectiveNotifEnabled
+									? "关闭提醒"
+									: "开启提醒"}
 					</button>
 				</div>
 			</div>
