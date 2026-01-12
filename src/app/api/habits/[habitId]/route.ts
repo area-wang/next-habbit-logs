@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
+import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { DEFAULT_JOB_WINDOW_DAYS, cancelScheduledJobsForTarget, getEffectiveUserTzOffsetMin, scheduleHabitAllJobs } from "@/lib/scheduled-jobs";
 
 function isValidYmd(s: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -10,6 +12,10 @@ function isValidYmd(s: string) {
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ habitId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
+
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
 
 	const { habitId } = await ctx.params;
 	if (!habitId) return badRequest("habitId is required");
@@ -76,6 +82,46 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ habitId: 
 		.bind(...binds)
 		.run();
 
+	try {
+		const db = getDb();
+		const habitRow = await db
+			.prepare("SELECT id, title, active, start_date, end_date FROM habits WHERE id = ? AND user_id = ?")
+			.bind(habitId, user.id)
+			.first();
+		const habitTitle = habitRow && (habitRow as any).title == null ? "" : String((habitRow as any).title);
+		const active = habitRow && (habitRow as any).active == null ? 0 : Number((habitRow as any).active);
+		const startDate = habitRow && (habitRow as any).start_date == null ? "" : String((habitRow as any).start_date);
+		const endDate = habitRow && (habitRow as any).end_date == null ? null : String((habitRow as any).end_date);
+		if (habitTitle && startDate) {
+			const remindersRes = await db
+				.prepare(
+					"SELECT id, time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
+				)
+				.bind(user.id, habitId)
+				.all();
+			const reminders = (remindersRes.results || [])
+				.map((r: any) => ({
+					reminderId: String(r.id || ""),
+					timeMin: r.time_min == null ? NaN : Number(r.time_min),
+					enabled: Number(r.enabled) === 1,
+				}))
+				.filter((x) => x.reminderId && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
+			await scheduleHabitAllJobs(db, {
+				userId: user.id,
+				habitId,
+				habitTitle,
+				active,
+				startDate,
+				endDate,
+				reminders,
+				tzOffsetMin,
+				days: DEFAULT_JOB_WINDOW_DAYS,
+			});
+		}
+	} catch {
+		// ignore
+	}
+
 	return json({ ok: true });
 }
 
@@ -87,6 +133,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ habitId:
 	if (!habitId) return badRequest("habitId is required");
 
 	const db = getDb();
+	await cancelScheduledJobsForTarget(db, { userId: user.id, targetType: "habit", targetId: habitId });
 	await db.prepare("DELETE FROM habits WHERE id = ? AND user_id = ?").bind(habitId, user.id).run();
 	await db
 		.prepare("DELETE FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ?")

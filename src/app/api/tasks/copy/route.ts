@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
+import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { getEffectiveUserTzOffsetMin, scheduleTaskJobs } from "@/lib/scheduled-jobs";
 
 function isValidYmd(s: string) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -35,6 +37,10 @@ type PostBody = {
 export async function POST(req: NextRequest) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
+
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
 
 	const body = (await req.json().catch(() => null)) as PostBody | null;
 	const fromScopeKey = String(body?.fromScopeKey || "");
@@ -106,6 +112,17 @@ export async function POST(req: NextRequest) {
 			offsetMin: endEnabled ? 0 : null,
 			timeMin: null,
 			enabled: endEnabled,
+		});
+		await scheduleTaskJobs(db, {
+			userId: user.id,
+			taskId: id,
+			dayYmd: toScopeKey,
+			taskTitle: title,
+			status: "todo",
+			startMin,
+			endMin,
+			remindBeforeMin,
+			tzOffsetMin,
 		});
 
 		createdTasks.push({

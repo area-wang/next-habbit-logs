@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
+import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { cancelScheduledJobsForTarget, getEffectiveUserTzOffsetMin, scheduleTaskJobs } from "@/lib/scheduled-jobs";
 
 async function upsertReminder(db: D1Database, p: {
 	userId: string;
@@ -25,6 +27,10 @@ async function upsertReminder(db: D1Database, p: {
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
+
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
 
 	const { taskId } = await ctx.params;
 	if (!taskId) return badRequest("taskId is required");
@@ -90,11 +96,23 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 		.bind(...binds)
 		.run();
 
-	if (body?.startMin !== undefined || body?.endMin !== undefined || body?.remindBeforeMin !== undefined) {
+	if (
+		body?.title !== undefined ||
+		body?.status !== undefined ||
+		body?.startMin !== undefined ||
+		body?.endMin !== undefined ||
+		body?.remindBeforeMin !== undefined
+	) {
 		const row = await getDb()
-			.prepare("SELECT start_min, end_min, remind_before_min FROM tasks WHERE id = ? AND user_id = ?")
+			.prepare(
+				"SELECT title, status, scope_type, scope_key, start_min, end_min, remind_before_min FROM tasks WHERE id = ? AND user_id = ?",
+			)
 			.bind(taskId, user.id)
 			.first();
+		const title = row && (row as any).title == null ? "" : String((row as any).title);
+		const status = row && (row as any).status == null ? "" : String((row as any).status);
+		const scopeType = row && (row as any).scope_type == null ? "" : String((row as any).scope_type);
+		const scopeKey = row && (row as any).scope_key == null ? "" : String((row as any).scope_key);
 		const startMin = row && (row as any).start_min == null ? null : Number((row as any).start_min);
 		const endMin = row && (row as any).end_min == null ? null : Number((row as any).end_min);
 		const rbm = row && (row as any).remind_before_min == null ? null : Number((row as any).remind_before_min);
@@ -117,6 +135,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 			timeMin: null,
 			enabled: endEnabled,
 		});
+		if (scopeType === "day" && scopeKey) {
+			await scheduleTaskJobs(db, {
+				userId: user.id,
+				taskId,
+				dayYmd: scopeKey,
+				taskTitle: title,
+				status,
+				startMin,
+				endMin,
+				remindBeforeMin: rbm,
+				tzOffsetMin,
+			});
+		}
 	}
 
 	return json({ ok: true });
@@ -130,6 +161,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ taskId: 
 	if (!taskId) return badRequest("taskId is required");
 
 	const db = getDb();
+	await cancelScheduledJobsForTarget(db, { userId: user.id, targetType: "task", targetId: taskId });
 	await db.prepare("DELETE FROM tasks WHERE id = ? AND user_id = ?").bind(taskId, user.id).run();
 	await db
 		.prepare("DELETE FROM reminders WHERE user_id = ? AND target_type = 'task' AND target_id = ?")

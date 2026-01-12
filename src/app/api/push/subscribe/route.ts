@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
 import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { DEFAULT_JOB_WINDOW_DAYS, backfillUserJobs } from "@/lib/scheduled-jobs";
 
 function isValidTzOffsetMin(v: unknown) {
 	const n = typeof v === "number" ? v : Number(v);
@@ -35,12 +36,28 @@ export async function POST(req: NextRequest) {
 
 	const now = Date.now();
 	const id = crypto.randomUUID();
-	await getDb()
+	const db = getDb();
+	await db
 		.prepare(
 			"INSERT INTO push_subscriptions (id, user_id, endpoint, expiration_time, p256dh, auth, tz_offset_min, created_at, updated_at, disabled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, expiration_time = excluded.expiration_time, p256dh = excluded.p256dh, auth = excluded.auth, tz_offset_min = excluded.tz_offset_min, updated_at = excluded.updated_at, disabled_at = NULL",
 		)
 		.bind(id, user.id, endpoint, expirationTime, p256dh, auth, tzOffsetMin, now, now)
 		.run();
+
+	try {
+		const row = await db
+			.prepare(
+				"SELECT COUNT(1) as c FROM scheduled_jobs WHERE user_id = ? AND status IN ('pending','retry','running') AND run_at >= ?",
+			)
+			.bind(user.id, now - 5 * 60_000)
+			.first();
+		const c = Number((row as any)?.c || 0);
+		if (c === 0) {
+			await backfillUserJobs(db, { userId: user.id, tzOffsetMin, days: DEFAULT_JOB_WINDOW_DAYS });
+		}
+	} catch {
+		// ignore
+	}
 
 	return json({ ok: true });
 }

@@ -7,9 +7,14 @@
 	"name": "next-habbit-logs",
 	"main": "./custom-worker.ts",
 	"compatibility_date": "2025-10-08",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
 	"triggers": {
-		"crons": ["* * * * *"]
+		"crons": [
+			"* * * * *"
+		]
 	},
 	"d1_databases": [
 		{
@@ -25,5 +30,17 @@
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"env": {
+		"dev": {
+			"name": "next-habbit-logs-dev",
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "habit_database_dev",
+					"database_id": "3dfc7b58-99bf-4255-bdea-251c78cb5e9b"
+				}
+			]
+		}
+	}
 }

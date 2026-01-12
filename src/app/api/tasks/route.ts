@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
+import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { getEffectiveUserTzOffsetMin, scheduleTaskJobs } from "@/lib/scheduled-jobs";
 
 async function upsertReminder(db: D1Database, p: {
 	userId: string;
@@ -59,6 +61,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
+
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
 
 	const body = (await req.json().catch(() => null)) as null | {
 		title?: string;
@@ -131,6 +137,19 @@ export async function POST(req: NextRequest) {
 		timeMin: null,
 		enabled: endEnabled,
 	});
+	if (scopeType === "day") {
+		await scheduleTaskJobs(db, {
+			userId: user.id,
+			taskId: id,
+			dayYmd: scopeKey,
+			taskTitle: title,
+			status: "todo",
+			startMin,
+			endMin,
+			remindBeforeMin,
+			tzOffsetMin,
+		});
+	}
 
 	return json({ ok: true, taskId: id });
 }

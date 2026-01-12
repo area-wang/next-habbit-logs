@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
+import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
+import { DEFAULT_JOB_WINDOW_DAYS, getEffectiveUserTzOffsetMin, scheduleHabitAllJobs } from "@/lib/scheduled-jobs";
 
 function isValidHHMM(s: string) {
 	return /^\d{2}:\d{2}$/.test(s);
@@ -47,9 +49,51 @@ type PostBody = {
 	enabled?: boolean;
 };
 
+async function refreshHabitJobs(db: D1Database, p: { userId: string; habitId: string; tzOffsetMin: number }) {
+	const habitRow = await db
+		.prepare("SELECT id, title, active, start_date, end_date FROM habits WHERE id = ? AND user_id = ?")
+		.bind(p.habitId, p.userId)
+		.first();
+	const habitTitle = habitRow && (habitRow as any).title == null ? "" : String((habitRow as any).title);
+	const active = habitRow && (habitRow as any).active == null ? 0 : Number((habitRow as any).active);
+	const startDate = habitRow && (habitRow as any).start_date == null ? "" : String((habitRow as any).start_date);
+	const endDate = habitRow && (habitRow as any).end_date == null ? null : String((habitRow as any).end_date);
+	if (!habitTitle || !startDate) return;
+
+	const remindersRes = await db
+		.prepare(
+			"SELECT id, time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
+		)
+		.bind(p.userId, p.habitId)
+		.all();
+	const reminders = (remindersRes.results || [])
+		.map((r: any) => ({
+			reminderId: String(r.id || ""),
+			timeMin: r.time_min == null ? NaN : Number(r.time_min),
+			enabled: Number(r.enabled) === 1,
+		}))
+		.filter((x) => x.reminderId && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
+
+	await scheduleHabitAllJobs(db, {
+		userId: p.userId,
+		habitId: p.habitId,
+		habitTitle,
+		active,
+		startDate,
+		endDate,
+		reminders,
+		tzOffsetMin: p.tzOffsetMin,
+		days: DEFAULT_JOB_WINDOW_DAYS,
+	});
+}
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: string }> }) {
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
+
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
 
 	const { habitId } = await ctx.params;
 	if (!habitId) return badRequest("habitId is required");
@@ -72,12 +116,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: s
 	const now = Date.now();
 	const id = `rem:${user.id}:habit:${habitId}:habit_time:${timeMin}`;
 
-	await getDb()
+	const db = getDb();
+	await db
 		.prepare(
 			"INSERT INTO reminders (id, user_id, target_type, target_id, anchor, offset_min, time_min, enabled, created_at, updated_at) VALUES (?, ?, 'habit', ?, 'habit_time', NULL, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET time_min = excluded.time_min, enabled = excluded.enabled, updated_at = excluded.updated_at",
 		)
 		.bind(id, user.id, habitId, timeMin, enabled, now, now)
 		.run();
+
+	await refreshHabitJobs(db, { userId: user.id, habitId, tzOffsetMin });
 
 	return json({ ok: true });
 }
@@ -90,6 +137,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ habitId:
 	const user = await getAuthedUserFromRequest(req);
 	if (!user) return unauthorized();
 
+	const tzRaw = req.cookies.get("tzOffsetMin")?.value;
+	const tzFallback = tzRaw != null && /^-?\d+$/.test(String(tzRaw)) ? Number(tzRaw) : DEFAULT_TZ_OFFSET_MINUTES;
+	const tzOffsetMin = await getEffectiveUserTzOffsetMin(getDb(), { userId: user.id, fallback: tzFallback });
+
 	const { habitId } = await ctx.params;
 	if (!habitId) return badRequest("habitId is required");
 
@@ -97,12 +148,15 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ habitId:
 	const timeMin = body?.timeMin == null ? null : Number(body.timeMin);
 	if (timeMin == null || !Number.isFinite(timeMin) || timeMin < 0 || timeMin > 1439) return badRequest("invalid timeMin");
 
-	await getDb()
+	const db = getDb();
+	await db
 		.prepare(
 			"DELETE FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time' AND time_min = ?",
 		)
 		.bind(user.id, habitId, timeMin)
 		.run();
+
+	await refreshHabitJobs(db, { userId: user.id, habitId, tzOffsetMin });
 
 	return json({ ok: true });
 }
