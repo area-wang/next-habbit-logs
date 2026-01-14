@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Serif_SC } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import PwaRegister from "./pwa-register";
@@ -12,6 +12,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
 	variable: "--font-geist-mono",
 	subsets: ["latin"],
+});
+
+const notoSerifSC = Noto_Serif_SC({
+	variable: "--font-noto-serif-sc",
+	subsets: ["latin"],
+	weight: ["300", "500", "700"],
 });
 
 export const metadata: Metadata = {
@@ -38,8 +44,14 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="en" suppressHydrationWarning>
+			<head>
+				<link
+					href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&display=swap"
+					rel="stylesheet"
+				/>
+			</head>
 			<body
-				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+				className={`${geistSans.variable} ${geistMono.variable} ${notoSerifSC.variable} antialiased`}
 			>
 				<Script id="theme-init" strategy="beforeInteractive">
 					{`

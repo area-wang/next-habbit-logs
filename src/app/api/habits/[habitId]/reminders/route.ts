@@ -4,6 +4,7 @@ import { getAuthedUserFromRequest } from "@/lib/auth-request";
 import { badRequest, json, unauthorized } from "@/lib/http";
 import { DEFAULT_TZ_OFFSET_MINUTES } from "@/lib/date";
 import { DEFAULT_JOB_WINDOW_DAYS, getEffectiveUserTzOffsetMin, scheduleHabitAllJobs } from "@/lib/scheduled-jobs";
+import { validateReminder } from "@/lib/reminder-validation";
 
 function isValidHHMM(s: string) {
 	return /^\d{2}:\d{2}$/.test(s);
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ habitId: st
 
 	const res = await getDb()
 		.prepare(
-			"SELECT time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time' ORDER BY time_min ASC",
+			"SELECT time_min, end_time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time' ORDER BY time_min ASC",
 		)
 		.bind(user.id, habitId)
 		.all();
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ habitId: st
 	const times = (res.results || [])
 		.map((r: any) => ({
 			timeMin: r.time_min == null ? null : Number(r.time_min),
+			endTimeMin: r.end_time_min == null ? null : Number(r.end_time_min),
 			enabled: Number(r.enabled) === 1,
 		}))
 		.filter((x) => x.timeMin != null && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
@@ -46,6 +48,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ habitId: st
 type PostBody = {
 	hhmm?: string;
 	timeMin?: number;
+	endHhmm?: string;
+	endTimeMin?: number;
 	enabled?: boolean;
 };
 
@@ -62,7 +66,7 @@ async function refreshHabitJobs(db: D1Database, p: { userId: string; habitId: st
 
 	const remindersRes = await db
 		.prepare(
-			"SELECT id, time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
+			"SELECT id, time_min, end_time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
 		)
 		.bind(p.userId, p.habitId)
 		.all();
@@ -70,6 +74,7 @@ async function refreshHabitJobs(db: D1Database, p: { userId: string; habitId: st
 		.map((r: any) => ({
 			reminderId: String(r.id || ""),
 			timeMin: r.time_min == null ? NaN : Number(r.time_min),
+			endTimeMin: r.end_time_min == null ? null : Number(r.end_time_min),
 			enabled: Number(r.enabled) === 1,
 		}))
 		.filter((x) => x.reminderId && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
@@ -112,6 +117,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: s
 		return badRequest("hhmm or timeMin is required");
 	}
 
+	let endTimeMin: number | null = null;
+	if (body?.endTimeMin != null) {
+		endTimeMin = Number(body.endTimeMin);
+		if (!Number.isFinite(endTimeMin) || endTimeMin < 0 || endTimeMin > 1439) return badRequest("invalid endTimeMin");
+	} else if (body?.endHhmm != null) {
+		const endHhmm = String(body.endHhmm);
+		if (!isValidHHMM(endHhmm)) return badRequest("invalid endHhmm");
+		endTimeMin = hhmmToMin(endHhmm);
+		if (endTimeMin == null) return badRequest("invalid endHhmm");
+	}
+
+	// 验证提醒配置
+	const validation = validateReminder({ timeMin, endTimeMin });
+	if (!validation.valid) {
+		return badRequest(validation.error || "invalid reminder configuration");
+	}
+
 	const enabled = body?.enabled === false ? 0 : 1;
 	const now = Date.now();
 	const id = `rem:${user.id}:habit:${habitId}:habit_time:${timeMin}`;
@@ -119,9 +141,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ habitId: s
 	const db = getDb();
 	await db
 		.prepare(
-			"INSERT INTO reminders (id, user_id, target_type, target_id, anchor, offset_min, time_min, enabled, created_at, updated_at) VALUES (?, ?, 'habit', ?, 'habit_time', NULL, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET time_min = excluded.time_min, enabled = excluded.enabled, updated_at = excluded.updated_at",
+			"INSERT INTO reminders (id, user_id, target_type, target_id, anchor, offset_min, time_min, end_time_min, enabled, created_at, updated_at) VALUES (?, ?, 'habit', ?, 'habit_time', NULL, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET time_min = excluded.time_min, end_time_min = excluded.end_time_min, enabled = excluded.enabled, updated_at = excluded.updated_at",
 		)
-		.bind(id, user.id, habitId, timeMin, enabled, now, now)
+		.bind(id, user.id, habitId, timeMin, endTimeMin, enabled, now, now)
 		.run();
 
 	await refreshHabitJobs(db, { userId: user.id, habitId, tzOffsetMin });

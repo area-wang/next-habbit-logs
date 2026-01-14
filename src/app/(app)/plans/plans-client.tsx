@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/date";
 import TimeSelect from "../today/time-select";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 type ScopeType = "day" | "week" | "month" | "year";
 
@@ -66,6 +67,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [editStartHHMM, setEditStartHHMM] = useState("");
 	const [editEndHHMM, setEditEndHHMM] = useState("");
 	const [editRemindBeforeMin, setEditRemindBeforeMin] = useState(5);
+	const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null);
 
 	async function load() {
 		const res = await fetch(`/api/tasks?scopeType=${encodeURIComponent(scopeType)}&scopeKey=${encodeURIComponent(scopeKey)}`);
@@ -170,10 +172,9 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	}
 
 	async function deleteTask(task: Task) {
-		const ok = window.confirm(`确定删除任务「${task.title}」吗？`);
-		if (!ok) return;
 		setTasks((prev) => prev.filter((t) => t.id !== task.id));
 		await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+		setConfirmDeleteTask(null);
 	}
 
 	const doneCount = tasks.filter((t) => t.status === "done").length;
@@ -311,7 +312,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 									</button>
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-										onClick={() => deleteTask(t)}
+										onClick={() => setConfirmDeleteTask(t)}
 										aria-label="删除"
 									>
 										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
@@ -379,6 +380,16 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					))
 				)}
 			</div>
+
+			<ConfirmDialog
+				open={confirmDeleteTask !== null}
+				onOpenChange={(open) => !open && setConfirmDeleteTask(null)}
+				title="确认删除"
+				description={`确定删除任务「${confirmDeleteTask?.title}」吗？`}
+				confirmText="删除"
+				onConfirm={() => confirmDeleteTask && deleteTask(confirmDeleteTask)}
+				variant="danger"
+			/>
 		</div>
 	);
 }

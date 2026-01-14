@@ -6,41 +6,12 @@ import LogoutButton from "./logout-button";
 
 export default function AppHeader({ userLabel }: { userLabel: string }) {
 	const [open, setOpen] = useState(false);
-	type Theme = "dark" | "butter";
-	const [theme, setTheme] = useState<Theme>("dark");
-
-	function applyTheme(t: Theme) {
-		const root = document.documentElement;
-		if (t === "dark") {
-			root.classList.add("dark");
-			root.classList.remove("theme-butter");
-		} else {
-			root.classList.remove("dark");
-			root.classList.add("theme-butter");
-		}
-	}
 
 	useEffect(() => {
-		try {
-			const stored = window.localStorage.getItem("theme");
-			const initial: Theme = stored === "butter" ? "butter" : "dark";
-			setTheme(initial);
-			applyTheme(initial);
-		} catch {
-			// ignore
-		}
+		const root = document.documentElement;
+		root.classList.remove("dark");
+		root.classList.add("theme-butter");
 	}, []);
-
-	function toggleTheme() {
-		const next: Theme = theme === "dark" ? "butter" : "dark";
-		setTheme(next);
-		try {
-			window.localStorage.setItem("theme", next);
-		} catch {
-			// ignore
-		}
-		applyTheme(next);
-	}
 
 	return (
 		<header className="sticky top-0 z-10 backdrop-blur bg-[color:var(--header-bg)] border-b border-[color:var(--border-color)]">
@@ -52,7 +23,7 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 							className="font-semibold inline-flex items-center gap-2 min-w-0"
 							onClick={() => setOpen(false)}
 						>
-							<img src={theme === "butter" ? "/logo-black.svg" : "/logo.svg"} alt="爱你老己" className="h-6 w-6 shrink-0" />
+							<img src="/logo-black.svg" alt="爱你老己" className="h-6 w-6 shrink-0" />
 							<span className="truncate">爱你老己</span>
 						</Link>
 						<nav className="hidden sm:flex items-center gap-3 text-sm">
@@ -64,6 +35,9 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 							</Link>
 							<Link className="hover:underline" href="/habits">
 								习惯
+							</Link>
+							<Link className="hover:underline" href="/reflections">
+								三省
 							</Link>
 							<Link className="hover:underline" href="/history">
 								历史
@@ -78,27 +52,11 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 					</div>
 
 					<div className="hidden sm:flex items-center gap-3">
-						<button
-							className="h-9 px-3 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors text-sm"
-							onClick={toggleTheme}
-							type="button"
-							aria-label={theme === "dark" ? "切换到淡黄色主题" : "切换到黑色主题"}
-						>
-							{theme === "dark" ? "淡黄" : "黑色"}
-						</button>
 						<div className="text-sm opacity-80 max-w-[160px] truncate">{userLabel}</div>
 						<LogoutButton />
 					</div>
 
 					<div className="sm:hidden flex items-center gap-2">
-						<button
-							className="h-10 px-3 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors text-sm"
-							onClick={toggleTheme}
-							type="button"
-							aria-label={theme === "dark" ? "切换到淡黄色主题" : "切换到黑色主题"}
-						>
-							{theme === "dark" ? "淡黄" : "黑色"}
-						</button>
 						<button
 							className="h-10 w-10 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors"
 							onClick={() => setOpen((v) => !v)}
@@ -132,6 +90,9 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 							</Link>
 							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/habits" onClick={() => setOpen(false)}>
 								习惯
+							</Link>
+							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/reflections" onClick={() => setOpen(false)}>
+								三省
 							</Link>
 							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/history" onClick={() => setOpen(false)}>
 								历史

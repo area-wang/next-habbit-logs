@@ -298,10 +298,102 @@ npm run deploy
 - Cloudflare Worker 是否启用了 Cron Trigger（`wrangler.jsonc` 已配置 `* * * * *`）
 - 是否配置了 `VAPID_*` 与 `APP_ORIGIN`
 
-## 8. 命令速查
+## 8. 多环境部署（生产 / 开发环境）
+
+本项目支持多环境部署，通过 `wrangler.jsonc` 的 `env` 配置区分生产和开发环境。
+
+### 8.1 环境配置
+
+`wrangler.jsonc` 中定义了两个环境：
+
+| 环境 | Worker 名称 | D1 数据库 | 用途 |
+|------|-------------|-----------|------|
+| 生产（默认） | `next-habbit-logs` | `habit_database` | main 分支 |
+| 开发 | `next-habbit-logs-dev` | `habit_database_dev` | develop 分支 |
+
+### 8.2 创建开发环境 D1 数据库
+
+```bash
+npx wrangler d1 create habit_database_dev
+```
+
+执行后会返回 `database_id`，更新到 `wrangler.jsonc` 的 `env.dev.d1_databases` 中。
+
+### 8.3 开发环境数据库迁移
+
+**本地迁移**：
+```bash
+npx wrangler d1 migrations apply DB --env dev
+```
+
+**远程迁移**：
+```bash
+npx wrangler d1 migrations apply DB --env dev --remote
+```
+
+### 8.4 开发环境 Secrets 配置
+
+为开发环境设置 secrets：
+
+```bash
+npx wrangler secret put APP_ORIGIN --env dev
+npx wrangler secret put SESSION_SECRET --env dev
+npx wrangler secret put VAPID_SUBJECT --env dev
+npx wrangler secret put VAPID_SERVER_PUBLIC_KEY --env dev
+npx wrangler secret put VAPID_SERVER_PRIVATE_KEY --env dev
+```
+
+**生成新的密钥**：
+
+```bash
+# 生成 SESSION_SECRET
+openssl rand -base64 32
+
+# 生成 VAPID 密钥对
+npx web-push generate-vapid-keys
+```
+
+> 注意：开发环境建议使用独立的 VAPID 密钥对，与生产环境隔离。
+
+### 8.5 部署到开发环境
+
+**方式一：使用环境变量**（推荐）
+```bash
+npx opennextjs-cloudflare build
+CLOUDFLARE_ENV=dev npx wrangler deploy
+```
+
+### 8.6 Cloudflare Git 集成配置
+
+如果使用 Cloudflare 的 Git 集成自动部署：
+
+**生产分支（main）**：
+- Build command: `npx opennextjs-cloudflare build`
+- Deploy command: `npx wrangler deploy --env=""`
+
+**非生产分支（develop 等）**：
+- Build command: `npx opennextjs-cloudflare build`
+- Deploy command: `CLOUDFLARE_ENV=dev npx wrangler deploy`
+
+### 8.7 本地开发切换环境
+
+本地开发时，可以创建环境特定的变量文件：
+
+- `.dev.vars` - 默认开发变量
+- `.dev.vars.dev` - dev 环境特定变量
+
+启动时指定环境：
+```bash
+CLOUDFLARE_ENV=dev npm run preview
+```
+
+## 9. 命令速查
 
 - 开发：`npm run dev`
 - 生产构建：`npm run build`
 - 本地预览 Cloudflare Worker（OpenNext）：`npm run preview`
-- 部署 Cloudflare：`npm run deploy`
+- 部署 Cloudflare（生产）：`npm run deploy`
+- 部署 Cloudflare（开发）：`CLOUDFLARE_ENV=dev npx opennextjs-cloudflare deploy`
 - 生成 Cloudflare env 类型：`npm run cf-typegen`
+- 数据库迁移（开发环境本地）：`npx wrangler d1 migrations apply DB --env dev`
+- 数据库迁移（开发环境远程）：`npx wrangler d1 migrations apply DB --env dev --remote`

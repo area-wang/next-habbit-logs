@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { utcMsForOffsetMidnight } from "@/lib/date";
 import TimeSelect from "./time-select";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 type Task = {
 	id: string;
@@ -110,6 +111,7 @@ export default function TaskList({
 	const [copyError, setCopyError] = useState<string | null>(null);
 	const [yesterdayTasks, setYesterdayTasks] = useState<any[]>([]);
 	const [selectedYesterdayTaskIds, setSelectedYesterdayTaskIds] = useState<Set<string>>(new Set());
+	const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null);
 
 	const doneCount = useMemo(() => tasks.filter((t) => t.status === "done").length, [tasks]);
 	const todoCount = tasks.length - doneCount;
@@ -722,10 +724,9 @@ export default function TaskList({
 	}
 
 	async function deleteTask(task: Task) {
-		const ok = window.confirm(`确定删除任务「${task.title}」吗？`);
-		if (!ok) return;
 		setTasks((prev) => prev.filter((t) => t.id !== task.id));
 		await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+		setConfirmDeleteTask(null);
 	}
 
 	function beginEdit(task: Task) {
@@ -1180,7 +1181,7 @@ export default function TaskList({
 									</button>
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-[color:var(--border-color)] hover:bg-[color:var(--surface)] transition-colors cursor-pointer"
-										onClick={() => deleteTask(t)}
+										onClick={() => setConfirmDeleteTask(t)}
 										aria-label="删除"
 									>
 										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
@@ -1284,6 +1285,16 @@ export default function TaskList({
 					</Dialog.Content>
 				</Dialog.Portal>
 			</Dialog.Root>
+
+			<ConfirmDialog
+				open={confirmDeleteTask !== null}
+				onOpenChange={(open) => !open && setConfirmDeleteTask(null)}
+				title="确认删除"
+				description={`确定删除任务「${confirmDeleteTask?.title}」吗？`}
+				confirmText="删除"
+				onConfirm={() => confirmDeleteTask && deleteTask(confirmDeleteTask)}
+				variant="danger"
+			/>
 		</div>
 	);
 }

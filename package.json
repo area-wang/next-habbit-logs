@@ -43,6 +43,7 @@
 		"dev": "next dev",
 		"lint": "next lint",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+		"preview-dev": "opennextjs-cloudflare build && CLOUDFLARE_ENV=dev opennextjs-cloudflare preview",
 		"start": "next start"
 	}
 }

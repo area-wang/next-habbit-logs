@@ -90,7 +90,7 @@ export async function backfillUserJobs(db: D1Database, p: { userId: string; tzOf
 
 		const remindersRes = await db
 			.prepare(
-				"SELECT id, time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
+				"SELECT id, time_min, end_time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
 			)
 			.bind(p.userId, habitId)
 			.all();
@@ -98,6 +98,7 @@ export async function backfillUserJobs(db: D1Database, p: { userId: string; tzOf
 			.map((r: any) => ({
 				reminderId: String(r.id || ""),
 				timeMin: r.time_min == null ? NaN : Number(r.time_min),
+				endTimeMin: r.end_time_min == null ? null : Number(r.end_time_min),
 				enabled: Number(r.enabled) === 1,
 			}))
 			.filter((x) => x.reminderId && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
@@ -246,6 +247,19 @@ export async function scheduleTaskJobs(db: D1Database, p: {
 	}
 }
 
+function shouldScheduleJob(runAt: number, endTimeMin: number | null, tzOffsetMin: number): boolean {
+	if (endTimeMin == null) return true;
+
+	// 计算当天的结束时间
+	const runDate = new Date(runAt);
+	const dayStart = new Date(runDate);
+	dayStart.setUTCHours(0, 0, 0, 0);
+	const endTime = dayStart.getTime() + endTimeMin * 60_000 - tzOffsetMin * 60_000;
+
+	// 只有当 runAt 早于 endTime 时才调度
+	return runAt < endTime;
+}
+
 export async function scheduleHabitReminderJobs(db: D1Database, p: {
 	userId: string;
 	habitId: string;
@@ -256,6 +270,7 @@ export async function scheduleHabitReminderJobs(db: D1Database, p: {
 	reminderId: string;
 	enabled: boolean;
 	timeMin: number;
+	endTimeMin: number | null;
 	tzOffsetMin: number;
 	days: number;
 }) {
@@ -276,6 +291,10 @@ export async function scheduleHabitReminderJobs(db: D1Database, p: {
 		if (!Number.isFinite(base)) continue;
 		const runAt = base + Number(p.timeMin) * 60_000;
 		if (!Number.isFinite(runAt)) continue;
+
+		// 检查是否应该调度此任务
+		if (!shouldScheduleJob(runAt, p.endTimeMin, p.tzOffsetMin)) continue;
+
 		const minuteKey = Math.floor(runAt / 60_000);
 		const dedupeKey = `${p.userId}:${p.reminderId}:${minuteKey}`;
 		await insertJob(db, {
@@ -303,7 +322,7 @@ export async function scheduleHabitAllJobs(db: D1Database, p: {
 	active: number;
 	startDate: string;
 	endDate: string | null;
-	reminders: Array<{ reminderId: string; timeMin: number; enabled: boolean }>;
+	reminders: Array<{ reminderId: string; timeMin: number; endTimeMin?: number | null; enabled: boolean }>;
 	tzOffsetMin: number;
 	days: number;
 }) {
@@ -320,6 +339,7 @@ export async function scheduleHabitAllJobs(db: D1Database, p: {
 			reminderId: r.reminderId,
 			enabled: r.enabled,
 			timeMin: r.timeMin,
+			endTimeMin: r.endTimeMin ?? null,
 			tzOffsetMin: p.tzOffsetMin,
 			days: p.days,
 		});

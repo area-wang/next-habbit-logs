@@ -5,6 +5,8 @@ import * as Select from "@radix-ui/react-select";
 import { useEffect, useMemo, useState } from "react";
 import TimeSelect from "../today/time-select";
 import { DayPicker } from "react-day-picker";
+import { ReminderTimeInput } from "./reminder-time-input";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 type Habit = {
 	id: string;
@@ -258,6 +260,7 @@ export default function HabitsClient() {
 	const [description, setDescription] = useState("");
 	const [startDate, setStartDate] = useState("");
 	const [endDate, setEndDate] = useState("");
+	const [createReminders, setCreateReminders] = useState<Array<{ timeMin: number; endTimeMin?: number | null }>>([]);
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -267,21 +270,30 @@ export default function HabitsClient() {
 	const [editEndDate, setEditEndDate] = useState("");
 	const [savingId, setSavingId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
-	const [habitReminders, setHabitReminders] = useState<Record<string, number[]>>({});
+	const [habitReminders, setHabitReminders] = useState<Record<string, Array<{ timeMin: number; endTimeMin?: number | null }>>>({});
 	const [remindersLoadingId, setRemindersLoadingId] = useState<string | null>(null);
 	const [addRemindHHMM, setAddRemindHHMM] = useState<Record<string, string>>({});
+	const [addRemindEndHHMM, setAddRemindEndHHMM] = useState<Record<string, string>>({});
 	const [remindersError, setRemindersError] = useState<string | null>(null);
+	const [confirmDeleteHabit, setConfirmDeleteHabit] = useState<Habit | null>(null);
 
 	const habitIdSet = useMemo(() => new Set(habits.map((h) => h.id)), [habits]);
 	useEffect(() => {
 		setHabitReminders((prev) => {
-			const next: Record<string, number[]> = {};
+			const next: Record<string, Array<{ timeMin: number; endTimeMin?: number | null }>> = {};
 			for (const k of Object.keys(prev)) {
 				if (habitIdSet.has(k)) next[k] = prev[k];
 			}
 			return next;
 		});
 		setAddRemindHHMM((prev) => {
+			const next: Record<string, string> = {};
+			for (const k of Object.keys(prev)) {
+				if (habitIdSet.has(k)) next[k] = prev[k];
+			}
+			return next;
+		});
+		setAddRemindEndHHMM((prev) => {
 			const next: Record<string, string> = {};
 			for (const k of Object.keys(prev)) {
 				if (habitIdSet.has(k)) next[k] = prev[k];
@@ -314,6 +326,7 @@ export default function HabitsClient() {
 					frequencyType: "daily",
 					startDate: startDate.trim() ? startDate.trim() : null,
 					endDate: endDate.trim() ? endDate.trim() : null,
+					reminders: createReminders.length > 0 ? createReminders : undefined,
 				}),
 			});
 			if (!res.ok) {
@@ -325,6 +338,7 @@ export default function HabitsClient() {
 			setDescription("");
 			setStartDate("");
 			setEndDate("");
+			setCreateReminders([]);
 			await load();
 		} finally {
 			setCreating(false);
@@ -370,10 +384,15 @@ export default function HabitsClient() {
 				return;
 			}
 			const data = (await res.json().catch(() => null)) as any;
-			const times = ((data?.reminders || []) as any[])
-				.map((x) => (x?.timeMin == null ? null : Number(x.timeMin)))
-				.filter((x) => x != null && Number.isFinite(x) && x >= 0 && x <= 1439) as number[];
-			setHabitReminders((prev) => ({ ...prev, [habitId]: Array.from(new Set(times)).sort((a, b) => a - b) }));
+			const reminders = ((data?.reminders || []) as any[])
+				.map((x) => ({
+					timeMin: x?.timeMin == null ? null : Number(x.timeMin),
+					endTimeMin: x?.endTimeMin == null ? null : Number(x.endTimeMin),
+				}))
+				.filter((x): x is { timeMin: number; endTimeMin: number | null } => 
+					x.timeMin != null && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439
+				);
+			setHabitReminders((prev) => ({ ...prev, [habitId]: reminders }));
 		} finally {
 			setRemindersLoadingId(null);
 		}
@@ -387,10 +406,25 @@ export default function HabitsClient() {
 			setRemindersError("请输入有效时间（HH:MM）");
 			return;
 		}
+
+		const endHhmm = String(addRemindEndHHMM[habitId] || "").trim();
+		let endTimeMin: number | null = null;
+		if (endHhmm) {
+			endTimeMin = hhmmToMin(endHhmm);
+			if (endTimeMin == null) {
+				setRemindersError("结束时间格式无效");
+				return;
+			}
+			if (endTimeMin <= timeMin) {
+				setRemindersError("结束时间必须晚于开始时间");
+				return;
+			}
+		}
+
 		const res = await fetch(`/api/habits/${habitId}/reminders`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ timeMin }),
+			body: JSON.stringify({ timeMin, endTimeMin }),
 		});
 		if (!res.ok) {
 			const d = (await res.json().catch(() => null)) as any;
@@ -398,6 +432,7 @@ export default function HabitsClient() {
 			return;
 		}
 		setAddRemindHHMM((prev) => ({ ...prev, [habitId]: "" }));
+		setAddRemindEndHHMM((prev) => ({ ...prev, [habitId]: "" }));
 		await loadHabitReminders(habitId);
 	}
 
@@ -454,8 +489,6 @@ export default function HabitsClient() {
 	}
 
 	async function deleteHabit(h: Habit) {
-		const ok = window.confirm(`确定删除习惯「${h.title}」吗？`);
-		if (!ok) return;
 		setError(null);
 		setDeletingId(h.id);
 		try {
@@ -467,6 +500,7 @@ export default function HabitsClient() {
 			}
 			setHabits((prev) => prev.filter((x) => x.id !== h.id));
 			if (editingId === h.id) setEditingId(null);
+			setConfirmDeleteHabit(null);
 		} finally {
 			setDeletingId(null);
 		}
@@ -510,6 +544,17 @@ export default function HabitsClient() {
 							allowClear={true}
 						/>
 					</div>
+					<div className="rounded-xl border border-black/10 dark:border-white/15 p-3">
+						<div className="text-sm font-medium">提醒时间（可选）</div>
+						<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒。</div>
+						<div className="mt-2">
+							<ReminderTimeInput
+								reminders={createReminders}
+								onChange={setCreateReminders}
+								disabled={creating}
+							/>
+						</div>
+					</div>
 					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
 					<button
 						className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
@@ -552,7 +597,7 @@ export default function HabitsClient() {
 									</button>
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-										onClick={() => deleteHabit(h)}
+										onClick={() => setConfirmDeleteHabit(h)}
 										aria-label="删除"
 										disabled={savingId === h.id || deletingId === h.id}
 									>
@@ -607,11 +652,19 @@ export default function HabitsClient() {
 										<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
 										{remindersError ? <div className="text-xs mt-2 text-red-600 dark:text-red-400">{remindersError}</div> : null}
 										<div className="mt-2 flex items-center gap-2">
-											<div className="w-48">
+											<div className="w-32">
 												<TimeSelect
 													value={addRemindHHMM[h.id] || ""}
 													onChange={(v) => setAddRemindHHMM((prev) => ({ ...prev, [h.id]: v }))}
-													placeholder="例如：08:30"
+													placeholder="开始时间"
+													stepMin={5}
+												/>
+											</div>
+											<div className="w-32">
+												<TimeSelect
+													value={addRemindEndHHMM[h.id] || ""}
+													onChange={(v) => setAddRemindEndHHMM((prev) => ({ ...prev, [h.id]: v }))}
+													placeholder="结束时间"
 													stepMin={5}
 												/>
 											</div>
@@ -630,12 +683,15 @@ export default function HabitsClient() {
 												<div className="text-xs opacity-70">暂无提醒时间</div>
 											) : (
 												<div className="flex flex-wrap gap-2">
-													{(habitReminders[h.id] || []).map((m) => (
-														<div key={m} className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1 text-xs">
-															<span>{minToHHMM(m)}</span>
+													{(habitReminders[h.id] || []).map((r, idx) => (
+														<div key={idx} className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1 text-xs">
+															<span>
+																{minToHHMM(r.timeMin)}
+																{r.endTimeMin != null && ` - ${minToHHMM(r.endTimeMin)}`}
+															</span>
 															<button
 																className="opacity-70 hover:opacity-100"
-																onClick={() => deleteHabitReminder(h.id, m)}
+																onClick={() => deleteHabitReminder(h.id, r.timeMin)}
 																disabled={remindersLoadingId === h.id}
 																aria-label="删除提醒时间"
 															>
@@ -672,6 +728,17 @@ export default function HabitsClient() {
 					))
 				)}
 			</div>
+
+			<ConfirmDialog
+				open={confirmDeleteHabit !== null}
+				onOpenChange={(open) => !open && setConfirmDeleteHabit(null)}
+				title="确认删除"
+				description={`确定删除习惯「${confirmDeleteHabit?.title}」吗？`}
+				confirmText="删除"
+				onConfirm={() => confirmDeleteHabit && deleteHabit(confirmDeleteHabit)}
+				loading={deletingId === confirmDeleteHabit?.id}
+				variant="danger"
+			/>
 		</div>
 	);
 }

@@ -95,7 +95,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ habitId: 
 		if (habitTitle && startDate) {
 			const remindersRes = await db
 				.prepare(
-					"SELECT id, time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
+					"SELECT id, time_min, end_time_min, enabled FROM reminders WHERE user_id = ? AND target_type = 'habit' AND target_id = ? AND anchor = 'habit_time'",
 				)
 				.bind(user.id, habitId)
 				.all();
@@ -103,6 +103,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ habitId: 
 				.map((r: any) => ({
 					reminderId: String(r.id || ""),
 					timeMin: r.time_min == null ? NaN : Number(r.time_min),
+					endTimeMin: r.end_time_min == null ? null : Number(r.end_time_min),
 					enabled: Number(r.enabled) === 1,
 				}))
 				.filter((x) => x.reminderId && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439);
