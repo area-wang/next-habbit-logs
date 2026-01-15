@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/date";
 import TimeSelect from "../today/time-select";
 import ConfirmDialog from "@/components/confirm-dialog";
@@ -102,44 +102,6 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [editEndHHMM, setEditEndHHMM] = useState("");
 	const [editRemindBeforeMin, setEditRemindBeforeMin] = useState(5);
 	const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null);
-	const createFormRef = useRef<HTMLDivElement>(null);
-	const editFormRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-	// 点击外部关闭表单
-	useEffect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			const target = event.target as Node;
-			
-			// 检查创建表单
-			if (showCreateForm && createFormRef.current && !createFormRef.current.contains(target)) {
-				const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
-				if (!isPortalClick) {
-					setShowCreateForm(false);
-					setTitle("");
-					setDescription("");
-					setStartHHMM("");
-					setEndHHMM("");
-					setRemindBeforeMin(5);
-				}
-			}
-			
-			// 检查编辑表单
-			if (editingId) {
-				const editFormRef = editFormRefs.current[editingId];
-				if (editFormRef && !editFormRef.contains(target)) {
-					const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
-					if (!isPortalClick) {
-						setEditingId(null);
-					}
-				}
-			}
-		}
-
-		document.addEventListener('mousedown', handleClickOutside);
-		return () => {
-			document.removeEventListener('mousedown', handleClickOutside);
-		};
-	}, [showCreateForm, editingId]);
 
 	async function load() {
 		const res = await fetch(`/api/tasks?scopeType=${encodeURIComponent(scopeType)}&scopeKey=${encodeURIComponent(scopeKey)}`);
@@ -416,9 +378,9 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 						新增计划
 					</button>
 				) : (
-					<div ref={createFormRef} className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
+					<div className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
 						<div className="flex items-end justify-between gap-4">
-							<div>
+						<div>
 								<div className="font-semibold text-purple-700">新任务</div>
 								<div className="text-sm opacity-70 mt-1">
 									{scopeType === "custom" ? (
@@ -451,11 +413,23 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 							<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 								<label className="block">
 									<div className="text-xs opacity-70 mb-1">开始时间</div>
-									<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="例如：09:00" stepMin={5} disabled={loading} />
+									<TimeSelect 
+										value={startHHMM} 
+										onChange={setStartHHMM} 
+										placeholder="例如：09:00" 
+										stepMin={5} 
+										disabled={loading}
+									/>
 								</label>
 								<label className="block">
 									<div className="text-xs opacity-70 mb-1">结束时间</div>
-									<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="例如：18:00" stepMin={5} disabled={loading} />
+									<TimeSelect 
+										value={endHHMM} 
+										onChange={setEndHHMM} 
+										placeholder="例如：18:00" 
+										stepMin={5} 
+										disabled={loading}
+									/>
 								</label>
 								<label className="block">
 									<div className="text-xs opacity-70 mb-1">提前提醒（分钟）</div>
@@ -566,8 +540,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 							</div>
 
 							{editingId === t.id ? (
-								<div ref={(el) => { if (el) editFormRefs.current[t.id] = el; }} className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
-									<input
+								<div className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
+								<input
 										className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
 										value={editTitle}
 										onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
@@ -582,8 +556,18 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										rows={2}
 									/>
 									<div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-										<TimeSelect value={editStartHHMM} onChange={setEditStartHHMM} placeholder="开始时间" stepMin={5} />
-										<TimeSelect value={editEndHHMM} onChange={setEditEndHHMM} placeholder="结束时间" stepMin={5} />
+										<TimeSelect 
+											value={editStartHHMM} 
+											onChange={setEditStartHHMM} 
+											placeholder="开始时间" 
+											stepMin={5}
+										/>
+										<TimeSelect 
+											value={editEndHHMM} 
+											onChange={setEditEndHHMM} 
+											placeholder="结束时间" 
+											stepMin={5}
+										/>
 										<input
 											className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
 											type="number"
