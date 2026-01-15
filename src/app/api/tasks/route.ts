@@ -30,11 +30,12 @@ function isValidYmd(s: string) {
 }
 
 function isValidScope(scopeType: string, scopeKey: string) {
-	if (!/^(day|week|month|year)$/.test(scopeType)) return false;
+	if (!/^(day|week|month|year|custom)$/.test(scopeType)) return false;
 	if (scopeType === "day") return isValidYmd(scopeKey);
 	if (scopeType === "month") return /^\d{4}-\d{2}$/.test(scopeKey);
 	if (scopeType === "year") return /^\d{4}$/.test(scopeKey);
 	if (scopeType === "week") return /^\d{4}-W\d{2}$/.test(scopeKey);
+	if (scopeType === "custom") return scopeKey.length > 0; // 自定义类型，scopeKey 是 tab ID
 	return false;
 }
 

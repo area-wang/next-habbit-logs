@@ -5,7 +5,7 @@ import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/da
 import TimeSelect from "../today/time-select";
 import ConfirmDialog from "@/components/confirm-dialog";
 
-type ScopeType = "day" | "week" | "month" | "year";
+type ScopeType = "day" | "week" | "month" | "year" | "custom";
 
 type Task = {
 	id: string;
@@ -17,6 +17,17 @@ type Task = {
 	end_min: number | null;
 	remind_before_min: number | null;
 	status: string;
+};
+
+type CustomTab = {
+	id: string;
+	user_id: string;
+	name: string;
+	scope_type: string;
+	scope_key: string | null;
+	sort_order: number;
+	created_at: number;
+	updated_at: number;
 };
 
 function minToHHMM(v: number | null) {
@@ -39,6 +50,13 @@ function hhmmToMin(s: string) {
 
 export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [scopeType, setScopeType] = useState<ScopeType>("day");
+	const [customTabs, setCustomTabs] = useState<CustomTab[]>([]);
+	const [selectedCustomTabId, setSelectedCustomTabId] = useState<string | null>(null);
+	const [showTabManager, setShowTabManager] = useState(false);
+	const [newTabName, setNewTabName] = useState("");
+	const [newTabScopeType, setNewTabScopeType] = useState<ScopeType>("custom");
+	const [newTabScopeKey, setNewTabScopeKey] = useState("");
+	const [confirmDeleteTab, setConfirmDeleteTab] = useState<CustomTab | null>(null);
 	const [hydrated, setHydrated] = useState(false);
 	const [nowMs, setNowMs] = useState<number>(0);
 	useEffect(() => {
@@ -46,12 +64,27 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		setHydrated(true);
 	}, []);
 	const scopeKey = useMemo(() => {
+		// 如果选择了自定义 tab
+		if (scopeType === "custom" && selectedCustomTabId) {
+			// 使用自定义 tab 的 ID 作为 scopeKey
+			return selectedCustomTabId;
+		}
+		
 		const d = new Date(nowMs);
 		if (scopeType === "day") return ymdInOffset(d, tzOffsetMin);
 		if (scopeType === "week") return isoWeekKeyInOffset(d, tzOffsetMin);
 		if (scopeType === "month") return ymInOffset(d, tzOffsetMin);
 		return yInOffset(d, tzOffsetMin);
-	}, [scopeType, tzOffsetMin, nowMs]);
+	}, [scopeType, selectedCustomTabId, customTabs, tzOffsetMin, nowMs]);
+
+	// 获取显示的范围名称
+	const displayScopeName = useMemo(() => {
+		if (scopeType === "custom" && selectedCustomTabId) {
+			const tab = customTabs.find(t => t.id === selectedCustomTabId);
+			return tab ? tab.name : "自定义";
+		}
+		return scopeType;
+	}, [scopeType, selectedCustomTabId, customTabs]);
 
 	const [tasks, setTasks] = useState<Task[]>([]);
 	const [showCreateForm, setShowCreateForm] = useState(false);
@@ -113,6 +146,17 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		const data = (await res.json()) as any;
 		setTasks((data.tasks || []) as Task[]);
 	}
+
+	async function loadCustomTabs() {
+		const res = await fetch("/api/custom-plan-tabs");
+		const data = (await res.json()) as any;
+		setCustomTabs((data.tabs || []) as CustomTab[]);
+	}
+
+	useEffect(() => {
+		if (!hydrated) return;
+		loadCustomTabs();
+	}, [hydrated]);
 
 	useEffect(() => {
 		if (!hydrated) return;
@@ -217,6 +261,43 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		setConfirmDeleteTask(null);
 	}
 
+	async function createCustomTab() {
+		if (!newTabName.trim()) return;
+		
+		const res = await fetch("/api/custom-plan-tabs", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				name: newTabName.trim(),
+				scopeType: newTabScopeType,
+				scopeKey: newTabScopeKey || undefined,
+			}),
+		});
+		
+		if (res.ok) {
+			await loadCustomTabs();
+			setNewTabName("");
+			setNewTabScopeType("custom");
+			setNewTabScopeKey("");
+			setShowTabManager(false);
+		}
+	}
+
+	async function deleteCustomTab(tab: CustomTab) {
+		await fetch(`/api/custom-plan-tabs/${tab.id}`, { method: "DELETE" });
+		await loadCustomTabs();
+		if (selectedCustomTabId === tab.id) {
+			setSelectedCustomTabId(null);
+			setScopeType("day");
+		}
+		setConfirmDeleteTab(null);
+	}
+
+	function switchToCustomTab(tab: CustomTab) {
+		setScopeType("custom");
+		setSelectedCustomTabId(tab.id);
+	}
+
 	const doneCount = tasks.filter((t) => t.status === "done").length;
 
 	return (
@@ -235,13 +316,93 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 								? "bg-purple-600 text-white border-purple-600"
 								: "border-black/10 hover:bg-black/5"
 						}`}
-						onClick={() => setScopeType(x.k)}
+						onClick={() => {
+							setScopeType(x.k);
+							setSelectedCustomTabId(null);
+						}}
 						disabled={loading}
 					>
 						{x.label}
 					</button>
 				))}
+				
+				{/* 自定义 tabs */}
+				{customTabs.map((tab) => (
+					<div key={tab.id} className="relative group">
+						<button
+							className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+								scopeType === "custom" && selectedCustomTabId === tab.id
+									? "bg-purple-600 text-white border-purple-600"
+									: "border-black/10 hover:bg-black/5"
+							}`}
+							onClick={() => switchToCustomTab(tab)}
+							disabled={loading}
+						>
+							{tab.name}
+						</button>
+						<button
+							className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+							onClick={(e) => {
+								e.stopPropagation();
+								setConfirmDeleteTab(tab);
+							}}
+							title="删除"
+						>
+							×
+						</button>
+					</div>
+				))}
+				
+				{/* 添加自定义 tab 按钮 */}
+				<button
+					className="text-sm px-3 py-1 rounded-full border border-dashed border-black/20 hover:border-purple-400 hover:bg-purple-50 transition-colors text-purple-600"
+					onClick={() => setShowTabManager(true)}
+				>
+					+ 自定义
+				</button>
 			</div>
+
+			{/* 自定义 Tab 管理器 */}
+			{showTabManager && (
+				<div className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
+					<div className="font-semibold text-purple-700 mb-3">添加自定义 Tab</div>
+					<div className="grid gap-3">
+						<input
+							className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+							placeholder="Tab 名称（例如：Q1 目标、项目 A）"
+							value={newTabName}
+							onChange={(e) => setNewTabName(e.target.value.slice(0, 20))}
+							maxLength={20}
+						/>
+						<input
+							className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+							placeholder="说明（可选，例如：2024年第一季度的重点目标）"
+							value={newTabScopeKey}
+							onChange={(e) => setNewTabScopeKey(e.target.value.slice(0, 100))}
+							maxLength={100}
+						/>
+						<div className="flex gap-2">
+							<button
+								className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
+								onClick={() => {
+									setShowTabManager(false);
+									setNewTabName("");
+									setNewTabScopeKey("");
+								}}
+							>
+								取消
+							</button>
+							<button
+								className="flex-1 px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+								onClick={createCustomTab}
+								disabled={!newTabName.trim()}
+							>
+								创建
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			<div>
 				{!showCreateForm ? (
@@ -259,7 +420,13 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 						<div className="flex items-end justify-between gap-4">
 							<div>
 								<div className="font-semibold text-purple-700">新任务</div>
-								<div className="text-sm opacity-70 mt-1">范围：{scopeType} / {hydrated ? scopeKey : "-"}</div>
+								<div className="text-sm opacity-70 mt-1">
+									{scopeType === "custom" ? (
+										<>范围：{displayScopeName}</>
+									) : (
+										<>范围：{scopeType} / {hydrated ? scopeKey : "-"}</>
+									)}
+								</div>
 							</div>
 							<div className="text-sm opacity-70">已完成 {doneCount}/{tasks.length}</div>
 						</div>
@@ -458,6 +625,16 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 				description={`确定删除任务「${confirmDeleteTask?.title}」吗？`}
 				confirmText="删除"
 				onConfirm={() => confirmDeleteTask && deleteTask(confirmDeleteTask)}
+				variant="danger"
+			/>
+
+			<ConfirmDialog
+				open={confirmDeleteTab !== null}
+				onOpenChange={(open) => !open && setConfirmDeleteTab(null)}
+				title="确认删除标签"
+				description={`确定删除标签「${confirmDeleteTab?.name}」吗？删除后该标签下的所有任务将无法访问。`}
+				confirmText="删除"
+				onConfirm={() => confirmDeleteTab && deleteCustomTab(confirmDeleteTab)}
 				variant="danger"
 			/>
 		</div>
