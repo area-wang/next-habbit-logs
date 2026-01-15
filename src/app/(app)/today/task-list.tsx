@@ -83,8 +83,6 @@ export default function TaskList({
 	const [remindBeforeMin, setRemindBeforeMin] = useState(5);
 	const [loading, setLoading] = useState(false);
 	const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
-	const createFormRef = useRef<HTMLDivElement>(null);
-	const editFormRefs = useRef<Record<string, HTMLDivElement | null>>({});
 	const [notifEnabled, setNotifEnabled] = useState(false);
 	const [appNotifEnabled, setAppNotifEnabled] = useState(false);
 	const [pushNotifEnabled, setPushNotifEnabled] = useState(false);
@@ -123,42 +121,6 @@ export default function TaskList({
 	}, [habits, checkedHabitIdSet]);
 	const effectiveFrontNotifEnabled = notifEnabled && appNotifEnabled;
 	const effectivePushNotifEnabled = notifEnabled && pushNotifEnabled;
-
-	// 点击外部关闭表单
-	useEffect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			const target = event.target as Node;
-			
-			// 检查创建表单
-			if (showCreateForm && createFormRef.current && !createFormRef.current.contains(target)) {
-				const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
-				if (!isPortalClick) {
-					setShowCreateForm(false);
-					setTitle("");
-					setDescription("");
-					setStartHHMM("");
-					setEndHHMM("");
-					setRemindBeforeMin(5);
-				}
-			}
-			
-			// 检查编辑表单
-			if (editingId) {
-				const editFormRef = editFormRefs.current[editingId];
-				if (editFormRef && !editFormRef.contains(target)) {
-					const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
-					if (!isPortalClick) {
-						setEditingId(null);
-					}
-				}
-			}
-		}
-
-		document.addEventListener('mousedown', handleClickOutside);
-		return () => {
-			document.removeEventListener('mousedown', handleClickOutside);
-		};
-	}, [showCreateForm, editingId]);
 
 	useEffect(() => {
 		setTasks(initialTasks);
@@ -1122,68 +1084,68 @@ export default function TaskList({
 						{isHistoryMode ? "新增任务" : "新增今日任务"}
 					</button>
 				) : (
-					<div ref={createFormRef} className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
+					<div className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
 						<div className="font-semibold text-purple-700 mb-3">
 							{isHistoryMode ? "新增任务" : "新增今日任务"}
 						</div>
-						<div className="flex gap-2">
-							<input
-								className="flex-1 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
-								placeholder={isHistoryMode ? "新增一个任务..." : "新增一个今日任务..."}
-								value={title}
-								onChange={(e) => setTitle(e.target.value.slice(0, 50))}
-								maxLength={50}
+							<div className="flex gap-2">
+								<input
+									className="flex-1 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
+									placeholder={isHistoryMode ? "新增一个任务..." : "新增一个今日任务..."}
+									value={title}
+									onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+									maxLength={50}
+									disabled={loading}
+								/>
+							</div>
+
+							<textarea
+								className="w-full mt-2 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
+								placeholder="备注/正文（可选）"
+								value={description}
+								onChange={(e) => setDescription(e.target.value)}
 								disabled={loading}
+								rows={2}
 							/>
-						</div>
 
-						<textarea
-							className="w-full mt-2 rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
-							placeholder="备注/正文（可选）"
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							disabled={loading}
-							rows={2}
-						/>
+							<div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+								<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="开始" />
+								<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="结束" />
+								<input
+									className="w-full h-10 text-sm rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 outline-none"
+									type="number"
+									min={0}
+									max={1440}
+									value={remindBeforeMin}
+									onChange={(e) => setRemindBeforeMin(Number(e.target.value))}
+									disabled={loading}
+									placeholder="提前提醒（分钟）"
+								/>
+							</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-							<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="开始" />
-							<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="结束" />
-							<input
-								className="w-full h-10 text-sm rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 outline-none"
-								type="number"
-								min={0}
-								max={1440}
-								value={remindBeforeMin}
-								onChange={(e) => setRemindBeforeMin(Number(e.target.value))}
-								disabled={loading}
-								placeholder="提前提醒（分钟）"
-							/>
-						</div>
-
-						<div className="flex gap-2 mt-3">
-							<button
-								className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
-								onClick={() => {
-									setShowCreateForm(false);
-									setTitle("");
-									setDescription("");
-									setStartHHMM("");
-									setEndHHMM("");
-									setRemindBeforeMin(5);
-								}}
-								disabled={loading}
-							>
-								取消
-							</button>
-							<button
-								className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-								onClick={create}
-								disabled={loading || !title.trim()}
-							>
-								{loading ? "添加中..." : "添加"}
-							</button>
-						</div>
+							<div className="flex gap-2 mt-3">
+								<button
+									className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
+									onClick={() => {
+										setShowCreateForm(false);
+										setTitle("");
+										setDescription("");
+										setStartHHMM("");
+										setEndHHMM("");
+										setRemindBeforeMin(5);
+									}}
+									disabled={loading}
+								>
+									取消
+								</button>
+								<button
+									className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+									onClick={create}
+									disabled={loading || !title.trim()}
+								>
+									{loading ? "添加中..." : "添加"}
+								</button>
+							</div>
 					</div>
 				)}
 			</div>
@@ -1274,7 +1236,7 @@ export default function TaskList({
 							</div>
 
 							{editingId === t.id ? (
-								<div ref={(el) => { if (el) editFormRefs.current[t.id] = el; }} className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
+								<div className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
 									<input
 										className="w-full rounded-xl border border-[color:var(--border-color)] bg-transparent px-3 py-2 outline-none"
 										value={editTitle}

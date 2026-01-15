@@ -80,10 +80,10 @@ export function ReminderTimeInput({ reminders, onChange, disabled }: ReminderTim
 	return (
 		<div className="space-y-3">
 			{reminders.length > 0 && (
-				<div className="flex flex-wrap gap-2">
+				<div className="flex flex-wrap gap-1.5">
 					{reminders.map((reminder, index) => (
-						<div key={index} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs">
-							<span>
+						<div key={index} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-2.5 py-1 text-xs">
+							<span className="whitespace-nowrap">
 								{minToHHMM(reminder.timeMin)}
 								{reminder.endTimeMin != null && ` - ${minToHHMM(reminder.endTimeMin)}`}
 							</span>
@@ -102,7 +102,7 @@ export function ReminderTimeInput({ reminders, onChange, disabled }: ReminderTim
 			)}
 
 			<div className="space-y-2">
-				<div className="flex gap-2">
+				<div className="flex flex-wrap gap-2">
 					<div className="w-32">
 						<TimeSelect
 							value={startTime}

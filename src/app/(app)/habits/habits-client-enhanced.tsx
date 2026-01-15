@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { HabitWithCategory, HabitCategory, TagStats } from "@/lib/types";
 import {
 	useHabits,
@@ -220,17 +220,27 @@ function YmdPicker({
 							</svg>
 						</button>
 						<div className="flex items-center gap-2">
-							<PrettySelect value={selectedYear} onValueChange={(y) => {
-								const yy = Number(y);
-								if (!Number.isFinite(yy)) return;
-								const mm = Number(selectedMonth) - 1;
-								setViewMonth(new Date(yy, mm, 1));
-							}} options={yearOptions} ariaLabel="选择年份" />
-							<PrettySelect value={selectedMonth} onValueChange={(m) => {
-								const mm = Number(m);
-								if (!Number.isFinite(mm)) return;
-								setViewMonth(new Date(viewMonth.getFullYear(), mm - 1, 1));
-							}} options={monthOptions} ariaLabel="选择月份" />
+							<PrettySelect 
+								value={selectedYear} 
+								onValueChange={(y) => {
+									const yy = Number(y);
+									if (!Number.isFinite(yy)) return;
+									const mm = Number(selectedMonth) - 1;
+									setViewMonth(new Date(yy, mm, 1));
+								}} 
+								options={yearOptions} 
+								ariaLabel="选择年份"
+							/>
+							<PrettySelect 
+								value={selectedMonth} 
+								onValueChange={(m) => {
+									const mm = Number(m);
+									if (!Number.isFinite(mm)) return;
+									setViewMonth(new Date(viewMonth.getFullYear(), mm - 1, 1));
+								}} 
+								options={monthOptions} 
+								ariaLabel="选择月份"
+							/>
 						</div>
 						<button
 							className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
@@ -294,7 +304,6 @@ export default function HabitsClientEnhanced() {
 	const [createTags, setCreateTags] = useState<string[]>([]);
 	const [createReminders, setCreateReminders] = useState<Array<{ timeMin: number; endTimeMin?: number | null }>>([]);
 	const [creating, setCreating] = useState(false);
-	const createFormRef = useRef<HTMLDivElement>(null);
 	
 	// 编辑习惯状态
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -305,7 +314,6 @@ export default function HabitsClientEnhanced() {
 	const [editCategoryId, setEditCategoryId] = useState<string>("");
 	const [editTags, setEditTags] = useState<string[]>([]);
 	const [savingId, setSavingId] = useState<string | null>(null);
-	const editFormRefs = useRef<Record<string, HTMLDivElement | null>>({});
 	
 	// 提醒状态
 	const [habitReminders, setHabitReminders] = useState<Record<string, Array<{ timeMin: number; endTimeMin?: number | null }>>>({});
@@ -352,46 +360,6 @@ export default function HabitsClientEnhanced() {
 	
 	// 获取所有标签名称
 	const allTagNames = useMemo(() => allTagStats.map((t: TagStats) => t.tag), [allTagStats]);
-
-	// 点击外部关闭表单
-	useEffect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			const target = event.target as Node;
-			
-			// 检查创建表单
-			if (showCreateForm && createFormRef.current && !createFormRef.current.contains(target)) {
-				// 检查是否点击了日期选择器或下拉菜单（这些是 Portal 渲染的）
-				const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"], .rdp');
-				if (!isPortalClick) {
-					setShowCreateForm(false);
-					// 清空表单
-					setTitle("");
-					setDescription("");
-					setStartDate("");
-					setEndDate("");
-					setCreateCategoryId("");
-					setCreateTags([]);
-					setCreateReminders([]);
-				}
-			}
-			
-			// 检查编辑表单
-			if (editingId) {
-				const editFormRef = editFormRefs.current[editingId];
-				if (editFormRef && !editFormRef.contains(target)) {
-					const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"], .rdp');
-					if (!isPortalClick) {
-						setEditingId(null);
-					}
-				}
-			}
-		}
-
-		document.addEventListener('mousedown', handleClickOutside);
-		return () => {
-			document.removeEventListener('mousedown', handleClickOutside);
-		};
-	}, [showCreateForm, editingId]);
 
 	// 刷新数据
 	const refreshData = () => {
@@ -805,79 +773,111 @@ export default function HabitsClientEnhanced() {
 							新增习惯
 						</button>
 					) : (
-						<div ref={createFormRef} className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
-							<h2 className="font-semibold text-purple-700">创建新习惯</h2>
-							<div className="mt-3 grid gap-3">
-								<input
-									className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
-									placeholder="例如：英语 20 分钟"
-									value={title}
-									onChange={(e) => setTitle(e.target.value.slice(0, 50))}
-									maxLength={50}
-									disabled={creating}
-								/>
-								<input
-									className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
-									placeholder="描述（可选）"
-									value={description}
-									onChange={(e) => setDescription(e.target.value)}
-									disabled={creating}
-								/>
-								<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-									<YmdPicker
-										value={startDate}
-										onChange={setStartDate}
-										placeholder="开始日期（默认今天）"
-										ariaLabel="开始日期"
-										disabled={creating}
-										allowClear={true}
-									/>
-									<YmdPicker
-										value={endDate}
-										onChange={setEndDate}
-										placeholder="结束日期（可选）"
-										ariaLabel="结束日期（可选）"
-										disabled={creating}
-										allowClear={true}
-									/>
-								</div>
-								<div>
-									<label className="text-sm font-medium mb-2 block">分类（可选）</label>
-									<select
-										className="w-full h-10 px-3 rounded-xl border border-black/10 bg-transparent text-sm outline-none cursor-pointer"
-										value={createCategoryId}
-										onChange={(e) => setCreateCategoryId(e.target.value)}
-										disabled={creating}
-									>
-										<option value="">未分类</option>
-										{categories.map((cat: HabitCategory) => (
-											<option key={cat.id} value={cat.id}>
-												{cat.name}
-											</option>
-										))}
-									</select>
-								</div>
-								<div>
-									<label className="text-sm font-medium mb-2 block">标签（可选）</label>
-									<TagInput
-										tags={createTags}
-										onChange={setCreateTags}
-										suggestions={allTagNames}
-										disabled={creating}
-									/>
-								</div>
-								<div className="rounded-xl border border-black/10 p-3">
-									<div className="text-sm font-medium">提醒时间（可选）</div>
-									<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒。</div>
-									<div className="mt-2">
-										<ReminderTimeInput
-											reminders={createReminders}
-											onChange={setCreateReminders}
+						<div className="rounded-2xl border-2 border-purple-400 bg-purple-50/30 overflow-hidden">
+							<div className="p-4 border-b border-purple-200">
+								<h2 className="font-semibold text-purple-700">创建新习惯</h2>
+							</div>
+								<div className="max-h-[70vh] overflow-y-auto overflow-x-hidden p-4">
+									<div className="grid gap-3">
+										<input
+											className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+											placeholder="例如：英语 20 分钟"
+											value={title}
+											onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+											maxLength={50}
 											disabled={creating}
 										/>
+										<textarea
+											className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none text-sm resize-none"
+											placeholder="正文/备注（可选）"
+											value={description}
+											onChange={(e) => setDescription(e.target.value)}
+											disabled={creating}
+											rows={2}
+										/>
+										<div className="grid grid-cols-2 gap-2">
+											<YmdPicker
+												value={startDate}
+												onChange={setStartDate}
+												placeholder="开始日期"
+												ariaLabel="开始日期"
+												disabled={creating}
+												allowClear={true}
+											/>
+											<YmdPicker
+												value={endDate}
+												onChange={setEndDate}
+												placeholder="结束日期"
+												ariaLabel="结束日期（可选）"
+												disabled={creating}
+												allowClear={true}
+											/>
+										</div>
+										<div>
+											<label className="text-xs font-medium mb-1.5 block opacity-70">分类</label>
+											<Select.Root value={createCategoryId || "none"} onValueChange={(val) => setCreateCategoryId(val === "none" ? "" : val)}>
+												<Select.Trigger className="w-full h-10 px-3 rounded-xl border border-black/10 bg-transparent text-sm outline-none cursor-pointer inline-flex items-center justify-between disabled:opacity-60">
+													<Select.Value placeholder="未分类" />
+													<Select.Icon>
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+															<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+														</svg>
+													</Select.Icon>
+												</Select.Trigger>
+												<Select.Portal>
+													<Select.Content className="overflow-hidden rounded-xl border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur shadow-xl z-50">
+														<Select.Viewport className="p-1">
+															<Select.Item value="none" className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
+																<Select.ItemText>未分类</Select.ItemText>
+																<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+																	<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+																		<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+																	</svg>
+																</Select.ItemIndicator>
+															</Select.Item>
+															{categories.map((cat: HabitCategory) => (
+																<Select.Item key={cat.id} value={cat.id} className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
+																	<Select.ItemText>
+																		<span className="inline-flex items-center gap-2">
+																			<span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+																			{cat.name}
+																		</span>
+																	</Select.ItemText>
+																	<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+																		<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+																			<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+																		</svg>
+																	</Select.ItemIndicator>
+																</Select.Item>
+															))}
+														</Select.Viewport>
+													</Select.Content>
+												</Select.Portal>
+											</Select.Root>
+										</div>
+										<div>
+											<label className="text-xs font-medium mb-1.5 block opacity-70">标签</label>
+											<TagInput
+												tags={createTags}
+												onChange={setCreateTags}
+												suggestions={allTagNames}
+												disabled={creating}
+											/>
+										</div>
+										<div className="rounded-xl border border-black/10 p-3">
+											<div className="text-xs font-medium opacity-70">提醒时间</div>
+											<div className="text-xs opacity-60 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
+											<div className="mt-2">
+												<ReminderTimeInput
+													reminders={createReminders}
+													onChange={setCreateReminders}
+													disabled={creating}
+												/>
+											</div>
+										</div>
 									</div>
 								</div>
-								<div className="flex gap-2">
+								<div className="p-4 border-t border-purple-200 flex gap-2">
 									<button
 										className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
 										onClick={() => {
@@ -885,23 +885,22 @@ export default function HabitsClientEnhanced() {
 											setTitle("");
 											setDescription("");
 											setStartDate("");
-											setEndDate("");
-											setCreateCategoryId("");
-											setCreateTags([]);
-											setCreateReminders([]);
-										}}
-										disabled={creating}
-									>
-										取消
-									</button>
-									<button
-										className="flex-1 px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-										onClick={handleCreate}
-										disabled={creating || !title.trim()}
-									>
-										{creating ? "创建中..." : "创建"}
-									</button>
-								</div>
+										setEndDate("");
+										setCreateCategoryId("");
+										setCreateTags([]);
+										setCreateReminders([]);
+									}}
+									disabled={creating}
+								>
+									取消
+								</button>
+								<button
+									className="flex-1 px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+									onClick={handleCreate}
+									disabled={creating || !title.trim()}
+								>
+									{creating ? "创建中..." : "保存"}
+								</button>
 							</div>
 						</div>
 					)}
@@ -1037,149 +1036,152 @@ export default function HabitsClientEnhanced() {
 
 								{/* 编辑表单 */}
 								{editingId === h.id && (
-									<div ref={(el) => { if (el) editFormRefs.current[h.id] = el; }} className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
-										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
-											value={editTitle}
-											onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
-											placeholder="标题"
-											maxLength={50}
-										/>
-										<textarea
-											className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none"
-											value={editDescription}
-											onChange={(e) => setEditDescription(e.target.value)}
-											placeholder="正文/备注（可选）"
-											rows={2}
-										/>
-										<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-											<YmdPicker
-												value={editStartDate}
-												onChange={setEditStartDate}
-												placeholder="开始日期"
-												ariaLabel="开始日期"
-												allowClear={false}
-											/>
-											<YmdPicker
-												value={editEndDate}
-												onChange={setEditEndDate}
-												placeholder="结束日期（可选）"
-												ariaLabel="结束日期（可选）"
-												allowClear={true}
-											/>
-										</div>
-										<div>
-											<label className="text-sm font-medium mb-2 block">分类</label>
-											<Select.Root value={editCategoryId || "none"} onValueChange={(val) => setEditCategoryId(val === "none" ? "" : val)}>
-												<Select.Trigger className="w-full h-10 px-3 rounded-xl border border-black/10 bg-transparent text-sm outline-none cursor-pointer inline-flex items-center justify-between">
-													<Select.Value placeholder="未分类" />
-													<Select.Icon>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-															<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-														</svg>
-													</Select.Icon>
-												</Select.Trigger>
-												<Select.Portal>
-													<Select.Content className="overflow-hidden rounded-xl border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur shadow-xl z-50">
-														<Select.Viewport className="p-1">
-															<Select.Item value="none" className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
-																<Select.ItemText>未分类</Select.ItemText>
-																<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-																	<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-																		<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-																	</svg>
-																</Select.ItemIndicator>
-															</Select.Item>
-															{categories.map((cat: HabitCategory) => (
-																<Select.Item key={cat.id} value={cat.id} className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
-																	<Select.ItemText>
-																		<span className="inline-flex items-center gap-2">
-																			<span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-																			{cat.name}
-																		</span>
-																	</Select.ItemText>
-																	<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-																		<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-																			<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-																		</svg>
-																	</Select.ItemIndicator>
-																</Select.Item>
-															))}
-														</Select.Viewport>
-													</Select.Content>
-												</Select.Portal>
-											</Select.Root>
-										</div>
-										<div>
-											<label className="text-sm font-medium mb-2 block">标签</label>
-											<TagInput
-												tags={editTags}
-												onChange={setEditTags}
-												suggestions={allTagNames}
-											/>
-										</div>
-
-										{/* 提醒时间管理 */}
-										<div className="mt-2 rounded-xl border border-black/10 p-3">
-											<div className="text-sm font-medium">提醒时间</div>
-											<div className="text-xs opacity-70 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
-											{remindersError && <div className="text-xs mt-2 text-red-600">{remindersError}</div>}
-											<div className="mt-2 flex items-center gap-2">
-												<div className="w-32">
-													<TimeSelect
-														value={addRemindHHMM[h.id] || ""}
-														onChange={(v) => setAddRemindHHMM((prev) => ({ ...prev, [h.id]: v }))}
-														placeholder="开始时间"
-														stepMin={5}
+									<div className="mt-3 rounded-xl border-2 border-purple-400 bg-purple-50/30 overflow-hidden">
+										<div className="max-h-[70vh] overflow-y-auto overflow-x-hidden p-3">
+											<div className="grid gap-2">
+												<input
+													className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+													value={editTitle}
+													onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
+													placeholder="标题"
+													maxLength={50}
+												/>
+												<textarea
+													className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none text-sm resize-none"
+													value={editDescription}
+													onChange={(e) => setEditDescription(e.target.value)}
+													placeholder="正文/备注（可选）"
+													rows={2}
+												/>
+												<div className="grid grid-cols-2 gap-2">
+													<YmdPicker
+														value={editStartDate}
+														onChange={setEditStartDate}
+														placeholder="开始日期"
+														ariaLabel="开始日期"
+														allowClear={false}
+													/>
+													<YmdPicker
+														value={editEndDate}
+														onChange={setEditEndDate}
+														placeholder="结束日期"
+														ariaLabel="结束日期（可选）"
+														allowClear={true}
 													/>
 												</div>
-												<div className="w-32">
-													<TimeSelect
-														value={addRemindEndHHMM[h.id] || ""}
-														onChange={(v) => setAddRemindEndHHMM((prev) => ({ ...prev, [h.id]: v }))}
-														placeholder="结束时间"
-														stepMin={5}
+												<div>
+													<label className="text-xs font-medium mb-1.5 block opacity-70">分类</label>
+													<Select.Root value={editCategoryId || "none"} onValueChange={(val) => setEditCategoryId(val === "none" ? "" : val)}>
+														<Select.Trigger className="w-full h-10 px-3 rounded-xl border border-black/10 bg-transparent text-sm outline-none cursor-pointer inline-flex items-center justify-between">
+															<Select.Value placeholder="未分类" />
+															<Select.Icon>
+																<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+																	<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+																</svg>
+															</Select.Icon>
+														</Select.Trigger>
+														<Select.Portal>
+															<Select.Content className="overflow-hidden rounded-xl border border-[color:var(--border-color)] bg-[color:var(--popover-bg)] backdrop-blur shadow-xl z-50">
+																<Select.Viewport className="p-1">
+																	<Select.Item value="none" className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
+																		<Select.ItemText>未分类</Select.ItemText>
+																		<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+																			<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+																				<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+																			</svg>
+																		</Select.ItemIndicator>
+																	</Select.Item>
+																	{categories.map((cat: HabitCategory) => (
+																		<Select.Item key={cat.id} value={cat.id} className="relative flex items-center h-9 px-8 rounded-lg text-sm outline-none cursor-pointer hover:bg-black/5 data-[highlighted]:bg-black/5">
+																			<Select.ItemText>
+																				<span className="inline-flex items-center gap-2">
+																					<span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+																					{cat.name}
+																				</span>
+																			</Select.ItemText>
+																			<Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+																				<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+																					<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+																				</svg>
+																			</Select.ItemIndicator>
+																		</Select.Item>
+																	))}
+																</Select.Viewport>
+															</Select.Content>
+														</Select.Portal>
+													</Select.Root>
+												</div>
+												<div>
+													<label className="text-xs font-medium mb-1.5 block opacity-70">标签</label>
+													<TagInput
+														tags={editTags}
+														onChange={setEditTags}
+														suggestions={allTagNames}
 													/>
 												</div>
-												<button
-													className="h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
-													onClick={() => addHabitReminder(h.id)}
-													disabled={remindersLoadingId === h.id}
-												>
-													添加
-												</button>
-											</div>
 
-											<div className="mt-3 space-y-2">
-												{remindersLoadingId === h.id && <div className="text-xs opacity-70">加载中...</div>}
-												{(habitReminders[h.id] || []).length === 0 ? (
-													<div className="text-xs opacity-70">暂无提醒时间</div>
-												) : (
-													<div className="flex flex-wrap gap-2">
-														{(habitReminders[h.id] || []).map((r, idx) => (
-															<div key={idx} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs">
-																<span>
-																	{minToHHMM(r.timeMin)}
-																	{r.endTimeMin != null && ` - ${minToHHMM(r.endTimeMin)}`}
-																</span>
-																<button
-																	className="opacity-70 hover:opacity-100"
-																	onClick={() => deleteHabitReminder(h.id, r.timeMin)}
-																	disabled={remindersLoadingId === h.id}
-																	aria-label="删除提醒时间"
-																>
-																	×
-																</button>
-															</div>
-														))}
+												{/* 提醒时间管理 */}
+												<div className="rounded-xl border border-black/10 p-2.5">
+													<div className="text-xs font-medium opacity-70">提醒时间</div>
+													<div className="text-xs opacity-60 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
+													{remindersError && <div className="text-xs mt-2 text-red-600">{remindersError}</div>}
+													<div className="mt-2 flex flex-wrap gap-2">
+														<div className="w-32">
+															<TimeSelect
+																value={addRemindHHMM[h.id] || ""}
+																onChange={(v) => setAddRemindHHMM((prev) => ({ ...prev, [h.id]: v }))}
+																placeholder="开始时间"
+																stepMin={5}
+															/>
+														</div>
+														<div className="w-32">
+															<TimeSelect
+																value={addRemindEndHHMM[h.id] || ""}
+																onChange={(v) => setAddRemindEndHHMM((prev) => ({ ...prev, [h.id]: v }))}
+																placeholder="结束时间"
+																stepMin={5}
+															/>
+														</div>
+														<button
+															className="h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
+															onClick={() => addHabitReminder(h.id)}
+															disabled={remindersLoadingId === h.id}
+														>
+															添加
+														</button>
 													</div>
-												)}
+
+													<div className="mt-2">
+														{remindersLoadingId === h.id && <div className="text-xs opacity-70">加载中...</div>}
+														{(habitReminders[h.id] || []).length === 0 ? (
+															<div className="text-xs opacity-70">暂无提醒时间</div>
+														) : (
+															<div className="flex flex-wrap gap-1.5">
+																{(habitReminders[h.id] || []).map((r, idx) => (
+																	<div key={idx} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-2.5 py-1 text-xs">
+																		<span className="whitespace-nowrap">
+																			{minToHHMM(r.timeMin)}
+																			{r.endTimeMin != null && ` - ${minToHHMM(r.endTimeMin)}`}
+																		</span>
+																		<button
+																			className="opacity-70 hover:opacity-100"
+																			onClick={() => deleteHabitReminder(h.id, r.timeMin)}
+																			disabled={remindersLoadingId === h.id}
+																			aria-label="删除提醒时间"
+																		>
+																			×
+																		</button>
+																	</div>
+																))}
+															</div>
+														)}
+													</div>
+												</div>
 											</div>
 										</div>
-
-										<div className="flex items-center gap-2">
+										<div className="p-3 border-t border-purple-200 flex items-center gap-2">
 											<button
-												className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
+												className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
 												onClick={() => setEditingId(null)}
 												disabled={savingId === h.id}
 												type="button"
@@ -1187,7 +1189,7 @@ export default function HabitsClientEnhanced() {
 												取消
 											</button>
 											<button
-												className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+												className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
 												onClick={() => saveEdit(h)}
 												disabled={!String(editTitle).trim() || savingId === h.id}
 												type="button"
