@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/date";
 import TimeSelect from "../today/time-select";
 import ConfirmDialog from "@/components/confirm-dialog";
@@ -54,6 +54,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	}, [scopeType, tzOffsetMin, nowMs]);
 
 	const [tasks, setTasks] = useState<Task[]>([]);
+	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
 	const [startHHMM, setStartHHMM] = useState("");
@@ -68,6 +69,44 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [editEndHHMM, setEditEndHHMM] = useState("");
 	const [editRemindBeforeMin, setEditRemindBeforeMin] = useState(5);
 	const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null);
+	const createFormRef = useRef<HTMLDivElement>(null);
+	const editFormRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+	// 点击外部关闭表单
+	useEffect(() => {
+		function handleClickOutside(event: MouseEvent) {
+			const target = event.target as Node;
+			
+			// 检查创建表单
+			if (showCreateForm && createFormRef.current && !createFormRef.current.contains(target)) {
+				const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
+				if (!isPortalClick) {
+					setShowCreateForm(false);
+					setTitle("");
+					setDescription("");
+					setStartHHMM("");
+					setEndHHMM("");
+					setRemindBeforeMin(5);
+				}
+			}
+			
+			// 检查编辑表单
+			if (editingId) {
+				const editFormRef = editFormRefs.current[editingId];
+				if (editFormRef && !editFormRef.contains(target)) {
+					const isPortalClick = (target as Element).closest('[role="dialog"], [role="listbox"]');
+					if (!isPortalClick) {
+						setEditingId(null);
+					}
+				}
+			}
+		}
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [showCreateForm, editingId]);
 
 	async function load() {
 		const res = await fetch(`/api/tasks?scopeType=${encodeURIComponent(scopeType)}&scopeKey=${encodeURIComponent(scopeKey)}`);
@@ -111,6 +150,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 			setDescription("");
 			setStartHHMM("");
 			setEndHHMM("");
+			setShowCreateForm(false); // 创建成功后收起表单
 			await load();
 		} finally {
 			setLoading(false);
@@ -192,8 +232,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 						key={x.k}
 						className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
 							scopeType === x.k
-								? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
-								: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+								? "bg-purple-600 text-white border-purple-600"
+								: "border-black/10 hover:bg-black/5"
 						}`}
 						onClick={() => setScopeType(x.k)}
 						disabled={loading}
@@ -203,63 +243,93 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 				))}
 			</div>
 
-			<div className="rounded-2xl border border-black/10 dark:border-white/15 p-4">
-				<div className="flex items-end justify-between gap-4">
-					<div>
-						<div className="font-semibold">新任务</div>
-						<div className="text-sm opacity-70 mt-1">范围：{scopeType} / {hydrated ? scopeKey : "-"}</div>
-					</div>
-					<div className="text-sm opacity-70">已完成 {doneCount}/{tasks.length}</div>
-				</div>
+			<div>
+				{!showCreateForm ? (
+					<button
+						className="w-full px-4 py-3 rounded-2xl border border-dashed border-black/20 hover:border-purple-400 hover:bg-purple-50 transition-colors text-sm font-medium text-purple-600 flex items-center justify-center gap-2"
+						onClick={() => setShowCreateForm(true)}
+					>
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+							<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+						</svg>
+						新增计划
+					</button>
+				) : (
+					<div ref={createFormRef} className="rounded-2xl border-2 border-purple-400 p-4 bg-purple-50/30">
+						<div className="flex items-end justify-between gap-4">
+							<div>
+								<div className="font-semibold text-purple-700">新任务</div>
+								<div className="text-sm opacity-70 mt-1">范围：{scopeType} / {hydrated ? scopeKey : "-"}</div>
+							</div>
+							<div className="text-sm opacity-70">已完成 {doneCount}/{tasks.length}</div>
+						</div>
 
-				<div className="mt-4 grid gap-3">
-					<input
-						className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-						placeholder="例如：写 1 页周总结"
-						value={title}
-						onChange={(e) => setTitle(e.target.value.slice(0, 50))}
-						maxLength={50}
-						disabled={loading}
-					/>
-					<textarea
-						className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
-						placeholder="正文/备注（可选）"
-						value={description}
-						onChange={(e) => setDescription(e.target.value)}
-						disabled={loading}
-						rows={2}
-					/>
-					<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-						<label className="block">
-							<div className="text-xs opacity-70 mb-1">开始时间</div>
-							<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="例如：09:00" stepMin={5} disabled={loading} />
-						</label>
-						<label className="block">
-							<div className="text-xs opacity-70 mb-1">结束时间</div>
-							<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="例如：18:00" stepMin={5} disabled={loading} />
-						</label>
-						<label className="block">
-							<div className="text-xs opacity-70 mb-1">提前提醒（分钟）</div>
+						<div className="mt-4 grid gap-3">
 							<input
-								className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
-								type="number"
-								min={0}
-								max={1440}
-								value={remindBeforeMin}
-								onChange={(e) => setRemindBeforeMin(Number(e.target.value))}
+								className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+								placeholder="例如：写 1 页周总结"
+								value={title}
+								onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+								maxLength={50}
 								disabled={loading}
 							/>
-						</label>
+							<textarea
+								className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none"
+								placeholder="正文/备注（可选）"
+								value={description}
+								onChange={(e) => setDescription(e.target.value)}
+								disabled={loading}
+								rows={2}
+							/>
+							<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+								<label className="block">
+									<div className="text-xs opacity-70 mb-1">开始时间</div>
+									<TimeSelect value={startHHMM} onChange={setStartHHMM} placeholder="例如：09:00" stepMin={5} disabled={loading} />
+								</label>
+								<label className="block">
+									<div className="text-xs opacity-70 mb-1">结束时间</div>
+									<TimeSelect value={endHHMM} onChange={setEndHHMM} placeholder="例如：18:00" stepMin={5} disabled={loading} />
+								</label>
+								<label className="block">
+									<div className="text-xs opacity-70 mb-1">提前提醒（分钟）</div>
+									<input
+										className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
+										type="number"
+										min={0}
+										max={1440}
+										value={remindBeforeMin}
+										onChange={(e) => setRemindBeforeMin(Number(e.target.value))}
+										disabled={loading}
+									/>
+								</label>
+							</div>
+							{error ? <div className="text-sm text-red-600">{error}</div> : null}
+							<div className="flex gap-2">
+								<button
+									className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
+									onClick={() => {
+										setShowCreateForm(false);
+										setTitle("");
+										setDescription("");
+										setStartHHMM("");
+										setEndHHMM("");
+										setRemindBeforeMin(5);
+									}}
+									disabled={loading}
+								>
+									取消
+								</button>
+								<button
+									className="flex-1 px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+									onClick={create}
+									disabled={loading || !title.trim()}
+								>
+									{loading ? "创建中..." : "创建"}
+								</button>
+							</div>
+						</div>
 					</div>
-					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-					<button
-						className="rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
-						onClick={create}
-						disabled={loading || !title.trim()}
-					>
-						{loading ? "创建中..." : "创建"}
-					</button>
-				</div>
+				)}
 			</div>
 
 			<div className="space-y-2">
@@ -272,8 +342,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 							data-task-id={t.id}
 							className={`w-full rounded-xl border px-4 py-3 transition-colors ${
 								t.status === "done"
-									? "border-black/25 bg-black/5 dark:border-white/25 dark:bg-white/10"
-									: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
+									? "border-black/25 bg-black/5"
+									: "border-black/10 hover:bg-black/5"
 							}`}
 						>
 							<div className="flex items-start justify-between gap-4">
@@ -296,7 +366,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 								</label>
 								<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 									<button
-										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
 										onClick={() => (editingId === t.id ? setEditingId(null) : beginEdit(t))}
 										aria-label={editingId === t.id ? "取消编辑" : "编辑"}
 									>
@@ -311,7 +381,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										</svg>
 									</button>
 									<button
-										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
 										onClick={() => setConfirmDeleteTask(t)}
 										aria-label="删除"
 									>
@@ -329,16 +399,16 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 							</div>
 
 							{editingId === t.id ? (
-								<div className="mt-3 grid gap-2">
+								<div ref={(el) => { if (el) editFormRefs.current[t.id] = el; }} className="mt-3 grid gap-2 p-3 rounded-xl border-2 border-purple-400 bg-purple-50/30">
 									<input
-										className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
+										className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
 										value={editTitle}
 										onChange={(e) => setEditTitle(e.target.value.slice(0, 50))}
 										placeholder="标题"
 										maxLength={50}
 									/>
 									<textarea
-										className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
+										className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none"
 										value={editDescription}
 										onChange={(e) => setEditDescription(e.target.value)}
 										placeholder="正文/备注（可选）"
@@ -348,7 +418,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										<TimeSelect value={editStartHHMM} onChange={setEditStartHHMM} placeholder="开始时间" stepMin={5} />
 										<TimeSelect value={editEndHHMM} onChange={setEditEndHHMM} placeholder="结束时间" stepMin={5} />
 										<input
-											className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 outline-none"
+											className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent px-3 outline-none"
 											type="number"
 											min={0}
 											max={1440}
@@ -359,14 +429,14 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 									</div>
 									<div className="flex items-center gap-2">
 										<button
-											className="flex-1 h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+											className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
 											onClick={() => setEditingId(null)}
 											type="button"
 										>
 											取消
 										</button>
 										<button
-											className="flex-1 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
+											className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 											onClick={() => saveEdit(t)}
 											disabled={!String(editTitle).trim()}
 											type="button"

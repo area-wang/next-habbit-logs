@@ -32,6 +32,30 @@ pnpm install
 bun install
 ```
 
+### Configure AI (Optional)
+
+The insights page includes AI-powered features. To enable them:
+
+1. Copy `.dev.vars.example` to `.dev.vars`:
+   ```bash
+   cp .dev.vars.example .dev.vars
+   ```
+
+2. Edit `.dev.vars` and add your AI API credentials:
+   ```
+   AI_API_KEY=your_api_key_here
+   AI_API_URL=https://api.deepseek.com
+   AI_MODEL=deepseek-chat
+   ```
+
+3. Supported AI providers:
+   - **DeepSeek** (default): https://platform.deepseek.com/
+   - **OpenAI**: https://platform.openai.com/
+   - **Moonshot**: https://platform.moonshot.cn/
+   - **Any OpenAI-compatible API**
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production configuration.
+
 Then run the development server (using the package manager of your choice):
 
 ```bash
@@ -52,6 +76,13 @@ This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-opti
 | `npm run preview`                 | Preview your build locally, before deploying |
 | `npm run build && npm run deploy` | Deploy your production site to Cloudflare    |
 | `npm wrangler tail`               | View real-time logs for all Workers          |
+
+## 📚 Documentation
+
+- **[docs/RUNBOOK.zh-CN.md](docs/RUNBOOK.zh-CN.md)** - 完整的运行手册（中文）
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - 生产环境部署指南
+- **[docs/FEATURE_ROADMAP.md](docs/FEATURE_ROADMAP.md)** - 功能路线图与改进建议
+- **[docs/README.md](docs/README.md)** - 文档索引
 
 ## Learn More
 

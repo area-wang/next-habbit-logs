@@ -82,7 +82,7 @@ export function ReminderTimeInput({ reminders, onChange, disabled }: ReminderTim
 			{reminders.length > 0 && (
 				<div className="flex flex-wrap gap-2">
 					{reminders.map((reminder, index) => (
-						<div key={index} className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1 text-xs">
+						<div key={index} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs">
 							<span>
 								{minToHHMM(reminder.timeMin)}
 								{reminder.endTimeMin != null && ` - ${minToHHMM(reminder.endTimeMin)}`}
@@ -125,12 +125,12 @@ export function ReminderTimeInput({ reminders, onChange, disabled }: ReminderTim
 						type="button"
 						onClick={handleAdd}
 						disabled={disabled}
-						className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
+						className="h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors disabled:opacity-50"
 					>
 						添加
 					</button>
 				</div>
-				{error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+				{error && <p className="text-xs text-red-600">{error}</p>}
 			</div>
 		</div>
 	);

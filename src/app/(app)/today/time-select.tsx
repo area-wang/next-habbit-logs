@@ -91,7 +91,7 @@ export default function TimeSelect({
 			<Popover.Anchor asChild>
 				<div className="w-full relative">
 					<input
-						className="w-full h-10 text-sm rounded-xl border border-black/10 dark:border-white/15 bg-transparent pl-3 pr-10 outline-none disabled:opacity-60"
+						className="w-full h-10 text-sm rounded-xl border border-black/10 bg-transparent pl-3 pr-10 outline-none disabled:opacity-60"
 						value={value}
 						placeholder={placeholder}
 						onChange={(e) => {

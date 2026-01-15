@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-	themeColor: "#0b0b0c",
+	themeColor: "#fff8db",
 	initialScale: 1,
 	maximumScale: 1,
 	userScalable: false,
@@ -53,29 +53,6 @@ export default function RootLayout({
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${notoSerifSC.variable} antialiased`}
 			>
-				<Script id="theme-init" strategy="beforeInteractive">
-					{`
-						(function () {
-							try {
-								var t = window.localStorage.getItem('theme');
-								var root = document.documentElement;
-								if (t === 'butter') {
-									root.classList.remove('dark');
-									root.classList.add('theme-butter');
-								} else {
-									root.classList.add('dark');
-									root.classList.remove('theme-butter');
-								}
-							} catch (e) {
-								try {
-									document.documentElement.classList.add('dark');
-								} catch (e2) {
-									// ignore
-								}
-							}
-						})();
-					`}
-				</Script>
 				<PwaRegister />
 				{children}
 			</body>

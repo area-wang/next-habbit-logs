@@ -203,3 +203,5 @@ dist
 next-env.d.ts
 
 .kiro
+
+.vscode

@@ -291,7 +291,7 @@ export default function HabitList({
 										取消
 									</button>
 									<button
-										className="flex-1 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
+										className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 										onClick={() => saveEdit(h)}
 										disabled={!String(editTitle).trim()}
 										type="button"
@@ -329,7 +329,7 @@ export default function HabitList({
 								</button>
 							</Dialog.Close>
 							<button
-								className="h-10 px-3 rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] border border-[color:var(--foreground)] hover:opacity-90 transition-opacity disabled:opacity-60"
+								className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 								onClick={saveNote}
 								disabled={noteSaving}
 								type="button"

@@ -17,13 +17,70 @@ export async function GET(req: NextRequest) {
 	const { searchParams } = new URL(req.url);
 	const date = searchParams.get("date");
 	if (date && !isValidYmd(date)) return badRequest("invalid date");
+	
+	// 新增查询参数
+	const archived = searchParams.get("archived") === "true";
+	const categoryId = searchParams.get("category_id");
+	const tagsParam = searchParams.get("tags");
+	const tagMatch = searchParams.get("tag_match") || "any"; // 'any' or 'all'
+
+	// 构建查询条件
+	let query = "SELECT id, title, description, frequency_type, frequency_n, active, start_date, end_date, category_id, tags, archived_at, created_at, updated_at FROM habits WHERE user_id = ?";
+	const bindings: any[] = [user.id];
+	
+	// 归档筛选
+	if (archived) {
+		query += " AND archived_at IS NOT NULL";
+	} else {
+		query += " AND archived_at IS NULL";
+	}
+	
+	// 分类筛选
+	if (categoryId) {
+		if (categoryId === "uncategorized") {
+			query += " AND category_id IS NULL";
+		} else {
+			query += " AND category_id = ?";
+			bindings.push(categoryId);
+		}
+	}
+	
+	query += " ORDER BY created_at DESC";
 
 	const habitsRes = await getDb()
-		.prepare(
-			"SELECT id, title, description, frequency_type, frequency_n, active, start_date, end_date, created_at, updated_at FROM habits WHERE user_id = ? ORDER BY created_at DESC",
-		)
-		.bind(user.id)
+		.prepare(query)
+		.bind(...bindings)
 		.all();
+	
+	let habits = habitsRes.results || [];
+	
+	// 标签筛选（在应用层处理，因为 SQLite 不支持 JSON 查询）
+	if (tagsParam) {
+		const searchTags = tagsParam.split(",").map(t => t.trim()).filter(t => t);
+		if (searchTags.length > 0) {
+			habits = habits.filter((habit: any) => {
+				if (!habit.tags) return false;
+				try {
+					const habitTags = JSON.parse(habit.tags) as string[];
+					if (!Array.isArray(habitTags)) return false;
+					
+					if (tagMatch === "all") {
+						// 必须包含所有搜索标签
+						return searchTags.every(searchTag => 
+							habitTags.some(habitTag => habitTag.trim() === searchTag)
+						);
+					} else {
+						// 包含任一搜索标签
+						return searchTags.some(searchTag => 
+							habitTags.some(habitTag => habitTag.trim() === searchTag)
+						);
+					}
+				} catch (e) {
+					return false;
+				}
+			});
+		}
+	}
 
 	let checkedHabitIds: string[] = [];
 	if (date) {
@@ -34,7 +91,7 @@ export async function GET(req: NextRequest) {
 		checkedHabitIds = (checkinsRes.results || []).map((r: any) => String(r.habit_id));
 	}
 
-	return json({ habits: habitsRes.results || [], checkedHabitIds, date });
+	return json({ habits, checkedHabitIds, date });
 }
 
 export async function POST(req: NextRequest) {

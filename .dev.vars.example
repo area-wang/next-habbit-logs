@@ -1,0 +1,37 @@
+# AI 大模型配置（可选）
+# 如果不配置，AI功能将显示配置提示，但其他分析功能不受影响
+
+# AI API密钥（必需）
+AI_API_KEY=your_api_key_here
+
+# AI API地址（可选，默认为 https://api.deepseek.com）
+AI_API_URL=https://api.deepseek.com
+
+# AI模型名称（可选，默认为 deepseek-chat）
+AI_MODEL=deepseek-chat
+
+# ===== 不同大模型配置示例 =====
+
+# DeepSeek（默认）
+# AI_API_KEY=sk-xxx
+# AI_API_URL=https://api.deepseek.com
+# AI_MODEL=deepseek-chat
+
+# OpenAI
+# AI_API_KEY=sk-xxx
+# AI_API_URL=https://api.openai.com
+# AI_MODEL=gpt-4
+
+# Moonshot
+# AI_API_KEY=sk-xxx
+# AI_API_URL=https://api.moonshot.cn
+# AI_MODEL=moonshot-v1-8k
+
+# 智谱AI
+# AI_API_KEY=xxx
+# AI_API_URL=https://open.bigmodel.cn/api/paas/v4
+# AI_MODEL=glm-4
+
+# ===== 向后兼容（旧配置名称仍然支持） =====
+# DEEPSEEK_API_KEY=your_api_key_here
+# DEEPSEEK_API_URL=https://api.deepseek.com

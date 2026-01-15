@@ -45,9 +45,6 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 							<Link className="hover:underline" href="/insights">
 								分析
 							</Link>
-							<Link className="hover:underline" href="/coach">
-								建议
-							</Link>
 						</nav>
 					</div>
 
@@ -58,7 +55,7 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 
 					<div className="sm:hidden flex items-center gap-2">
 						<button
-							className="h-10 w-10 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-[color:var(--surface)] transition-colors"
+							className="h-10 w-10 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-[color:var(--surface)] transition-colors"
 							onClick={() => setOpen((v) => !v)}
 							aria-label={open ? "收起菜单" : "展开菜单"}
 							aria-expanded={open}
@@ -99,9 +96,6 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 							</Link>
 							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/insights" onClick={() => setOpen(false)}>
 								分析
-							</Link>
-							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/coach" onClick={() => setOpen(false)}>
-								建议
 							</Link>
 						</nav>
 						<div className="px-4 py-3 border-t border-[color:var(--border-color)]">

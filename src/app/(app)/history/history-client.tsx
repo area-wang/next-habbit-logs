@@ -56,7 +56,7 @@ function PrettySelect({
 	return (
 		<Select.Root value={value} onValueChange={onValueChange}>
 			<Select.Trigger
-				className="h-9 px-3 rounded-full border border-black/10 dark:border-white/15 bg-transparent text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-2"
+				className="h-9 px-3 rounded-full border border-black/10 bg-transparent text-sm font-semibold hover:bg-black/5 transition-colors cursor-pointer inline-flex items-center gap-2"
 				aria-label={ariaLabel}
 			>
 				<Select.Value>{renderValue ? renderValue(value) : value}</Select.Value>
@@ -233,14 +233,14 @@ export default function HistoryClient() {
 			<div className="space-y-4">
 				<div className="flex items-center justify-between">
 					<button
-						className="text-sm px-3 py-1 rounded-full border border-black/10 dark:border-white/15 opacity-50"
+						className="text-sm px-3 py-1 rounded-full border border-black/10 opacity-50"
 						disabled
 					>
 						上个月
 					</button>
 					<div className="font-semibold">-</div>
 					<button
-						className="text-sm px-3 py-1 rounded-full border border-black/10 dark:border-white/15 opacity-50"
+						className="text-sm px-3 py-1 rounded-full border border-black/10 opacity-50"
 						disabled
 					>
 						下个月
@@ -299,7 +299,7 @@ export default function HistoryClient() {
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
 				<button
-					className="text-sm px-3 py-1 rounded-full border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+					className="text-sm px-3 py-1 rounded-full border border-black/10 hover:bg-black/5 transition-colors"
 					onClick={() => setMonth((m) => addMonths(m, -1))}
 					disabled={!month}
 				>
@@ -330,7 +330,7 @@ export default function HistoryClient() {
 					/>
 				</div>
 				<button
-					className="text-sm px-3 py-1 rounded-full border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+					className="text-sm px-3 py-1 rounded-full border border-black/10 hover:bg-black/5 transition-colors"
 					onClick={() => setMonth((m) => addMonths(m, 1))}
 					disabled={!month}
 				>
@@ -364,9 +364,9 @@ export default function HistoryClient() {
 							key={c.date}
 							className={`h-16 sm:h-20 rounded-xl border px-2 py-2 text-left cursor-pointer transition-colors ${
 								total > 0
-									? "border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10"
-									: "border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10"
-							} ${isTodayCell ? "bg-violet-500/10 dark:bg-violet-500/20 border-violet-500/50" : ""}`}
+									? "border-black/20 hover:bg-black/5"
+									: "border-black/10 hover:bg-black/5"
+							} ${isTodayCell ? "bg-violet-500/10 border-violet-500/50" : ""}`}
 							onClick={() => {
 								const date = String(c.date);
 								if (isMobile) {
@@ -399,17 +399,17 @@ export default function HistoryClient() {
 			<Dialog.Root open={!!selectedDay} onOpenChange={(open) => (!open ? setSelectedDay(null) : null)}>
 				<Dialog.Portal>
 					<Dialog.Overlay className="fixed inset-0 bg-black/60" />
-					<Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-black/10 dark:border-white/15 bg-white/95 dark:bg-black/80 backdrop-blur shadow-xl p-4">
+					<Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-white/95 backdrop-blur shadow-xl p-4">
 						<Dialog.Title className="font-semibold">{selectedDay?.date}</Dialog.Title>
 						<div className="text-sm opacity-70 mt-1">当日完成情况</div>
 						<div className="mt-4 grid gap-2 text-sm">
-							<div className="flex items-center justify-between rounded-xl border border-black/10 dark:border-white/15 px-3 py-2">
+							<div className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2">
 								<div className="opacity-80">习惯</div>
 								<div className="font-medium">
 									{selectedDay?.habitDoneCount ?? 0}/{selectedDay?.habitTotalCount ?? 0}
 								</div>
 							</div>
-							<div className="flex items-center justify-between rounded-xl border border-black/10 dark:border-white/15 px-3 py-2">
+							<div className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2">
 								<div className="opacity-80">任务</div>
 								<div className="font-medium">
 									{selectedDay?.taskDoneCount ?? 0}/{selectedDay?.taskTotalCount ?? 0}
@@ -419,7 +419,7 @@ export default function HistoryClient() {
 
 						<div className="mt-4 flex items-center justify-end gap-2">
 							<Dialog.Close asChild>
-								<button className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+								<button className="h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors">
 									关闭
 								</button>
 							</Dialog.Close>

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookieName } from "@/lib/auth";
 
-const PROTECTED_PREFIXES = ["/today", "/habits", "/insights", "/coach"];
+const PROTECTED_PREFIXES = ["/today", "/habits", "/insights"];
 
 export function middleware(req: NextRequest) {
 	const { pathname } = req.nextUrl;
@@ -29,5 +29,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-	matcher: ["/today/:path*", "/habits/:path*", "/insights/:path*", "/coach/:path*", "/login"],
+	matcher: ["/today/:path*", "/habits/:path*", "/insights/:path*", "/login"],
 };

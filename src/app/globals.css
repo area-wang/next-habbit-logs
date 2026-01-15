@@ -1,26 +1,8 @@
 @import "tailwindcss";
 @import "react-day-picker/style.css";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
+/* 固定使用淡黄色主题，不受系统主题影响 */
 :root {
-	--background: #222;
-	--foreground: #ededed;
-	--border-color: rgba(255, 255, 255, 0.12);
-	--surface: rgba(255, 255, 255, 0.06);
-	--surface-strong: rgba(255, 255, 255, 0.10);
-	--header-bg: rgb(34, 34, 34, 0.72);
-	--popover-bg: rgba(11, 11, 12, 0.82);
-	color-scheme: dark;
-	--rdp-accent-color: #8b5cf6;
-	--rdp-accent-background-color: rgba(139, 92, 246, 0.25);
-	--rdp-outline: 2px solid rgba(139, 92, 246, 0.9);
-	--rdp-outline-selected: 2px solid rgba(139, 92, 246, 0.9);
-	--rdp-day_button-border-radius: 12px;
-	--rdp-cell-size: 36px;
-}
-
-.theme-butter {
 	--background: #fff8db;
 	--foreground: #1a1a1a;
 	--border-color: rgba(0, 0, 0, 0.10);
@@ -33,6 +15,8 @@
 	--rdp-accent-background-color: rgba(217, 119, 6, 0.18);
 	--rdp-outline: 2px solid rgba(217, 119, 6, 0.75);
 	--rdp-outline-selected: 2px solid rgba(217, 119, 6, 0.75);
+	--rdp-day_button-border-radius: 12px;
+	--rdp-cell-size: 36px;
 }
 
 @theme inline {

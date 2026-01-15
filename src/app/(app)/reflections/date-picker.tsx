@@ -47,7 +47,7 @@ function PrettySelect({
 	return (
 		<Select.Root value={value} onValueChange={onValueChange}>
 			<Select.Trigger
-				className="h-8 px-3 rounded-full border border-black/10 dark:border-white/15 bg-transparent text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-2"
+				className="h-8 px-3 rounded-full border border-black/10 bg-transparent text-sm font-semibold hover:bg-black/5 transition-colors cursor-pointer inline-flex items-center gap-2"
 				aria-label={ariaLabel}
 			>
 				<Select.Value />
@@ -136,7 +136,7 @@ export default function DatePicker({
 		<Popover.Root>
 			<Popover.Trigger asChild>
 				<button
-					className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-2 text-sm"
+					className="h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer inline-flex items-center gap-2 text-sm"
 					type="button"
 					aria-label="选择日期"
 				>
@@ -159,7 +159,7 @@ export default function DatePicker({
 				>
 					<div className="flex items-center justify-between gap-2">
 						<button
-							className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+							className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
 							type="button"
 							aria-label="上个月"
 							onClick={() => setViewMonth((m) => addMonths(m, -1))}
@@ -192,7 +192,7 @@ export default function DatePicker({
 							/>
 						</div>
 						<button
-							className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+							className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
 							type="button"
 							aria-label="下个月"
 							onClick={() => setViewMonth((m) => addMonths(m, 1))}

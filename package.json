@@ -12,15 +12,17 @@
 		"publish": true
 	},
 	"dependencies": {
-		"@opennextjs/cloudflare": "1.14.0",
 		"@block65/webcrypto-web-push": "^1.0.2",
+		"@opennextjs/cloudflare": "1.14.0",
 		"@radix-ui/react-dialog": "^1.1.3",
 		"@radix-ui/react-popover": "^1.1.3",
 		"@radix-ui/react-select": "^2.1.3",
 		"next": "16.0.7",
 		"react": "19.2.1",
 		"react-day-picker": "^9.4.4",
-		"react-dom": "19.2.1"
+		"react-dom": "19.2.1",
+		"recharts": "^3.6.0",
+		"swr": "^2.3.8"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "3",

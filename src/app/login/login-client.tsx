@@ -38,16 +38,22 @@ export default function LoginClient() {
 	}
 
 	return (
-		<div className="min-h-screen flex items-center justify-center p-6">
-			<div className="w-full max-w-md rounded-2xl p-6 border border-[color:var(--border-color)] bg-[color:var(--surface-strong)] backdrop-blur">
-				<div className="flex items-center justify-between">
-					<h1 className="text-xl font-semibold">爱你老己</h1>
-					<div className="flex gap-2">
+		<div className="min-h-screen flex items-center justify-center p-6 bg-[#fef9f0]">
+			<div className="w-full max-w-md">
+				<div className="text-center mb-8">
+					<h1 className="text-3xl font-bold text-purple-600">
+						爱你老己
+					</h1>
+					<p className="text-sm text-gray-600 mt-2">计划 + 习惯：让执行变成系统</p>
+				</div>
+
+				<div className="rounded-2xl border border-gray-200 p-6 bg-white shadow-sm">
+					<div className="flex gap-2 mb-6">
 						<button
-							className={`text-sm px-3 py-1 rounded-full border ${
+							className={`flex-1 text-sm px-4 py-2 rounded-xl font-medium transition-colors ${
 								mode === "login"
-									? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
-									: "border-black/10 dark:border-white/15"
+									? "bg-purple-600 text-white"
+									: "border border-gray-200 text-gray-700 hover:bg-gray-50"
 							}`}
 							onClick={() => setMode("login")}
 							disabled={loading}
@@ -55,10 +61,10 @@ export default function LoginClient() {
 							登录
 						</button>
 						<button
-							className={`text-sm px-3 py-1 rounded-full border ${
+							className={`flex-1 text-sm px-4 py-2 rounded-xl font-medium transition-colors ${
 								mode === "signup"
-									? "bg-[color:var(--foreground)] text-[color:var(--background)] border-[color:var(--foreground)]"
-									: "border-black/10 dark:border-white/15"
+									? "bg-purple-600 text-white"
+									: "border border-gray-200 text-gray-700 hover:bg-gray-50"
 							}`}
 							onClick={() => setMode("signup")}
 							disabled={loading}
@@ -66,56 +72,63 @@ export default function LoginClient() {
 							注册
 						</button>
 					</div>
-				</div>
 
-				<div className="mt-6 space-y-3">
-					{mode === "signup" ? (
+					<div className="space-y-4">
+						{mode === "signup" ? (
+							<label className="block">
+								<div className="text-sm mb-2 text-gray-600">昵称（可选）</div>
+								<input
+									className="w-full h-10 rounded-xl border border-gray-200 bg-transparent px-3 outline-none focus:border-purple-500 transition-colors text-gray-900 placeholder:text-gray-400"
+									placeholder="输入你的昵称"
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									disabled={loading}
+								/>
+							</label>
+						) : null}
+
 						<label className="block">
-							<div className="text-sm mb-1 opacity-80">昵称（可选）</div>
+							<div className="text-sm mb-2 text-gray-600">邮箱</div>
 							<input
-								className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
-								value={name}
-								onChange={(e) => setName(e.target.value)}
+								className="w-full h-10 rounded-xl border border-gray-200 bg-transparent px-3 outline-none focus:border-purple-500 transition-colors text-gray-900 placeholder:text-gray-400"
+								type="email"
+								placeholder="your@email.com"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
 								disabled={loading}
 							/>
 						</label>
-					) : null}
 
-					<label className="block">
-						<div className="text-sm mb-1 opacity-80">邮箱</div>
-						<input
-							className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
-							type="email"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-							disabled={loading}
-						/>
-					</label>
+						<label className="block">
+							<div className="text-sm mb-2 text-gray-600">密码</div>
+							<input
+								className="w-full h-10 rounded-xl border border-gray-200 bg-transparent px-3 outline-none focus:border-purple-500 transition-colors text-gray-900 placeholder:text-gray-400"
+								type="password"
+								placeholder="至少 8 位"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								disabled={loading}
+							/>
+						</label>
 
-					<label className="block">
-						<div className="text-sm mb-1 opacity-80">密码</div>
-						<input
-							className="w-full rounded-xl border border-black/10 dark:border-white/15 bg-transparent px-3 py-2 outline-none"
-							type="password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							disabled={loading}
-						/>
-					</label>
+						{error ? (
+							<div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-xl border border-red-200">
+								{error}
+							</div>
+						) : null}
 
-					{error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}
+						<button
+							className="w-full h-10 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							onClick={submit}
+							disabled={loading || !email || !password}
+						>
+							{loading ? "处理中..." : mode === "login" ? "登录" : "注册并进入"}
+						</button>
+					</div>
 
-					<button
-						className="w-full rounded-xl bg-[color:var(--foreground)] text-[color:var(--background)] py-2 font-medium disabled:opacity-60"
-						onClick={submit}
-						disabled={loading}
-					>
-						{loading ? "处理中..." : mode === "login" ? "登录" : "注册并进入"}
-					</button>
-				</div>
-
-				<div className="mt-4 text-xs opacity-70 leading-5">
-					<p>提示：密码至少 8 位。</p>
+					<div className="mt-4 text-xs text-center text-gray-500">
+						密码至少需要 8 位字符
+					</div>
 				</div>
 			</div>
 		</div>

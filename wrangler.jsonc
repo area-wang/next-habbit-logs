@@ -34,6 +34,9 @@
 	"env": {
 		"dev": {
 			"name": "next-habbit-logs-dev",
+			"vars": {
+				"APP_ORIGIN": "https://plans-dev.x1an9.top"
+			},
 			"d1_databases": [
 				{
 					"binding": "DB",
