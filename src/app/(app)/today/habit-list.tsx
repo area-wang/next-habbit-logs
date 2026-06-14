@@ -8,6 +8,7 @@ export type Habit = {
 	id: string;
 	title: string;
 	description: string | null;
+	starred?: number;
 };
 
 export default function HabitList({
@@ -35,7 +36,16 @@ export default function HabitList({
 	const [noteSaving, setNoteSaving] = useState(false);
 
 	useEffect(() => {
-		setItems(habits);
+		// 对习惯进行排序：星标项在前
+		const sorted = [...habits].sort((a, b) => {
+			const aStarred = a.starred || 0;
+			const bStarred = b.starred || 0;
+			if (aStarred !== bStarred) {
+				return bStarred - aStarred; // 星标项在前
+			}
+			return 0; // 保持原有顺序
+		});
+		setItems(sorted);
 	}, [habits]);
 
 	useEffect(() => {
@@ -205,12 +215,14 @@ export default function HabitList({
 					<div
 						key={h.id}
 						data-habit-id={h.id}
-						className={`w-full rounded-xl border border-[color:var(--border-color)] px-4 py-3 transition-colors ${
-							highlightHabitId === h.id
+						className={`w-full rounded-xl border px-4 py-3 transition-colors ${
+							h.starred === 1
+								? "border-amber-400 bg-amber-50/30"
+								: highlightHabitId === h.id
 								? "border-yellow-500/60 bg-yellow-500/10"
 								: isChecked
-								? "bg-[color:var(--surface-strong)]"
-								: "hover:bg-[color:var(--surface)]"
+								? "bg-[color:var(--surface-strong)] border-[color:var(--border-color)]"
+								: "border-[color:var(--border-color)] hover:bg-[color:var(--surface)]"
 						}`}
 					>
 						<div className="flex items-start justify-between gap-4">

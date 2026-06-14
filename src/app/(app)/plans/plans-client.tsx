@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { isoWeekKeyInOffset, yInOffset, ymInOffset, ymdInOffset } from "@/lib/date";
 import TimeSelect from "../today/time-select";
 import ConfirmDialog from "@/components/confirm-dialog";
+import MotivationInputEnhanced, { MotivationItem } from "@/components/motivation-input-enhanced";
+import TaskActionLogsDialog from "@/components/task-action-logs-dialog";
 
 type ScopeType = "day" | "week" | "month" | "year" | "custom";
 
@@ -93,6 +95,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [startHHMM, setStartHHMM] = useState("");
 	const [endHHMM, setEndHHMM] = useState("");
 	const [remindBeforeMin, setRemindBeforeMin] = useState(5);
+	const [createMotivations, setCreateMotivations] = useState<MotivationItem[]>([{ content: "", images: [] }]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,7 +104,11 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [editStartHHMM, setEditStartHHMM] = useState("");
 	const [editEndHHMM, setEditEndHHMM] = useState("");
 	const [editRemindBeforeMin, setEditRemindBeforeMin] = useState(5);
+	const [editMotivations, setEditMotivations] = useState<MotivationItem[]>([{ content: "", images: [] }]);
 	const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null);
+	const [actionLogsDialogOpen, setActionLogsDialogOpen] = useState(false);
+	const [actionLogsTaskId, setActionLogsTaskId] = useState<string>("");
+	const [actionLogsTaskTitle, setActionLogsTaskTitle] = useState<string>("");
 
 	async function load() {
 		const res = await fetch(`/api/tasks?scopeType=${encodeURIComponent(scopeType)}&scopeKey=${encodeURIComponent(scopeKey)}`);
@@ -145,6 +152,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 					startMin,
 					endMin,
 					remindBeforeMin: rbm,
+					motivations: createMotivations.filter(m => m.content.trim()),
 				}),
 			});
 			if (!res.ok) {
@@ -156,6 +164,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 			setDescription("");
 			setStartHHMM("");
 			setEndHHMM("");
+			setCreateMotivations([{ content: "", images: [] }]);
 			setShowCreateForm(false); // 创建成功后收起表单
 			await load();
 		} finally {
@@ -170,24 +179,31 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		setEditStartHHMM(minToHHMM(task.start_min));
 		setEditEndHHMM(minToHHMM(task.end_min));
 		setEditRemindBeforeMin(task.remind_before_min == null ? 5 : Number(task.remind_before_min));
-		if (typeof window !== "undefined") {
-			let tries = 0;
-			function esc(v: string) {
-				try {
-					return (window as any).CSS?.escape ? (window as any).CSS.escape(v) : v.replace(/"/g, "\\\"");
-				} catch {
-					return v;
-				}
-			}
-			function tryScroll() {
-				const el = document.querySelector(`[data-task-id=\"${esc(task.id)}\"]`) as HTMLElement | null;
-				if (el) {
-					el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-					return;
-				}
-				if (tries++ < 12) window.requestAnimationFrame(tryScroll);
-			}
-			window.requestAnimationFrame(tryScroll);
+		setEditMotivations([{ content: "", images: [] }]);
+		void loadTaskMotivations(task.id);
+	}
+
+	async function loadTaskMotivations(taskId: string) {
+		try {
+			const res = await fetch(`/api/tasks/${taskId}/motivations`);
+			if (!res.ok) return;
+			const data = (await res.json().catch(() => null)) as any;
+			const motivations = ((data?.motivations || []) as any[])
+				.map((x) => {
+					const content = String(x?.content || "").trim();
+					let images: string[] = [];
+					try {
+						if (x?.image_url) {
+							const parsed = JSON.parse(x.image_url);
+							if (Array.isArray(parsed)) images = parsed;
+						}
+					} catch {}
+					return { content, images };
+				})
+				.filter((x) => x.content.length > 0);
+			setEditMotivations(motivations.length > 0 ? motivations : [{ content: "", images: [] }]);
+		} catch {
+			setEditMotivations([{ content: "", images: [] }]);
 		}
 	}
 
@@ -204,6 +220,16 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ title, description: desc ? desc : null, startMin, endMin, remindBeforeMin: rbm }),
 		});
+
+		// 保存动力
+		await fetch(`/api/tasks/${task.id}/motivations`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				motivations: editMotivations.filter(m => m.content.trim()),
+			}),
+		});
+
 		await load();
 	}
 
@@ -215,6 +241,22 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ status: nextStatus }),
 		});
+	}
+
+	async function toggleStarred(task: Task) {
+		const nextStarred = (task as any).starred === 1 ? 0 : 1;
+		setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, starred: nextStarred } : t)));
+		await fetch(`/api/tasks/${task.id}`, {
+			method: "PATCH",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ starred: nextStarred }),
+		});
+	}
+
+	function openActionLogs(task: Task) {
+		setActionLogsTaskId(task.id);
+		setActionLogsTaskTitle(task.title);
+		setActionLogsDialogOpen(true);
 	}
 
 	async function deleteTask(task: Task) {
@@ -261,6 +303,20 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	}
 
 	const doneCount = tasks.filter((t) => t.status === "done").length;
+
+	// 对任务进行排序：星标项在前，然后按创建时间排序
+	const sortedTasks = useMemo(() => {
+		return [...tasks].sort((a, b) => {
+			// 首先按星标排序（星标在前）
+			const aStarred = (a as any).starred || 0;
+			const bStarred = (b as any).starred || 0;
+			if (aStarred !== bStarred) {
+				return bStarred - aStarred; // 星标项（1）排在非星标项（0）前面
+			}
+			// 星标相同时，按ID排序（较早创建的在前）
+			return a.id.localeCompare(b.id);
+		});
+	}, [tasks]);
 
 	return (
 		<div className="space-y-6">
@@ -444,6 +500,13 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 									/>
 								</label>
 							</div>
+							<div>
+								<MotivationInputEnhanced
+									motivations={createMotivations}
+									onChange={setCreateMotivations}
+									disabled={loading}
+								/>
+							</div>
 							{error ? <div className="text-sm text-red-600">{error}</div> : null}
 							<div className="flex gap-2">
 								<button
@@ -454,7 +517,7 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 										setDescription("");
 										setStartHHMM("");
 										setEndHHMM("");
-										setRemindBeforeMin(5);
+										setCreateMotivations([{ content: "", images: [] }]);
 									}}
 									disabled={loading}
 								>
@@ -474,10 +537,10 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 			</div>
 
 			<div className="space-y-2">
-				{tasks.length === 0 ? (
+				{sortedTasks.length === 0 ? (
 					<div className="text-sm opacity-70">还没有任务。</div>
 				) : (
-					tasks.map((t) => (
+					sortedTasks.map((t) => (
 						<div
 							key={t.id}
 							data-task-id={t.id}
@@ -506,6 +569,40 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 									</div>
 								</label>
 								<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+									<button
+										className={`h-9 w-9 inline-flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+											(t as any).starred === 1
+												? "border-amber-400 bg-amber-50 text-amber-600 hover:bg-amber-100"
+												: "border-black/10 hover:bg-black/5"
+										}`}
+										onClick={() => toggleStarred(t)}
+										aria-label={(t as any).starred === 1 ? "取消星标" : "添加星标"}
+									>
+										<svg width="16" height="16" viewBox="0 0 24 24" fill={(t as any).starred === 1 ? "currentColor" : "none"} className="opacity-80">
+											<path
+												d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+												stroke="currentColor"
+												strokeWidth="2"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
+										</svg>
+									</button>
+									<button
+										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
+										onClick={() => openActionLogs(t)}
+										aria-label="行动记录"
+									>
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
+											<path
+												d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+												stroke="currentColor"
+												strokeWidth="2"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
+										</svg>
+									</button>
 									<button
 										className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
 										onClick={() => (editingId === t.id ? setEditingId(null) : beginEdit(t))}
@@ -578,6 +675,12 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 											placeholder="提前提醒（分钟）"
 										/>
 									</div>
+									<div>
+										<MotivationInputEnhanced
+											motivations={editMotivations}
+											onChange={setEditMotivations}
+										/>
+									</div>
 									<div className="flex items-center gap-2">
 										<button
 											className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors"
@@ -620,6 +723,13 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 				confirmText="删除"
 				onConfirm={() => confirmDeleteTab && deleteCustomTab(confirmDeleteTab)}
 				variant="danger"
+			/>
+
+			<TaskActionLogsDialog
+				open={actionLogsDialogOpen}
+				onOpenChange={setActionLogsDialogOpen}
+				taskId={actionLogsTaskId}
+				taskTitle={actionLogsTaskTitle}
 			/>
 		</div>
 	);

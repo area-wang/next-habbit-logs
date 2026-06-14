@@ -60,6 +60,8 @@ export interface Habit {
 	tags: string | null;
 	/** 归档时间戳（NULL 表示未归档） */
 	archived_at: number | null;
+	/** 是否星标（0 或 1） */
+	starred: number;
 	/** 创建时间戳 */
 	created_at: number;
 	/** 更新时间戳 */
@@ -90,7 +92,7 @@ export interface ReminderValidationResult {
 
 /**
  * Reflection 数据库模型
- * 表示用户的每日反思记录
+ * 表示用户的每日札记
  */
 export interface Reflection {
 	/** 反思 ID */
@@ -329,4 +331,98 @@ export interface TagStats {
 	count: number;
 	/** 关联的习惯完成率 */
 	completionRate?: number;
+}
+
+/**
+ * 习惯动力
+ */
+export interface HabitMotivation {
+	/** 动力ID */
+	id: string;
+	/** 习惯ID */
+	habit_id: string;
+	/** 用户ID */
+	user_id: string;
+	/** 动力内容 */
+	content: string;
+	/** 图片URL（可选） */
+	image_url: string | null;
+	/** 排序顺序 */
+	sort_order: number;
+	/** 创建时间戳 */
+	created_at: number;
+	/** 更新时间戳 */
+	updated_at: number;
+}
+
+/**
+ * 习惯行动记录
+ */
+export interface HabitActionLog {
+	/** 记录ID */
+	id: string;
+	/** 习惯ID */
+	habit_id: string;
+	/** 用户ID */
+	user_id: string;
+	/** 行动内容 */
+	content: string;
+	/** 图片URL（可选） */
+	image_url: string | null;
+	/** 心情状态：1=困难, 2=一般, 3=顺利 */
+	mood: number | null;
+	/** 是否为里程碑 */
+	is_milestone: number;
+	/** 关联的打卡日期 */
+	linked_date: string | null;
+	/** 创建时间戳 */
+	created_at: number;
+	/** 更新时间戳 */
+	updated_at: number;
+}
+
+/**
+ * 计划动力
+ */
+export interface TaskMotivation {
+	/** 动力ID */
+	id: string;
+	/** 任务ID */
+	task_id: string;
+	/** 用户ID */
+	user_id: string;
+	/** 动力内容 */
+	content: string;
+	/** 图片URL（可选） */
+	image_url: string | null;
+	/** 排序顺序 */
+	sort_order: number;
+	/** 创建时间戳 */
+	created_at: number;
+	/** 更新时间戳 */
+	updated_at: number;
+}
+
+/**
+ * 计划行动记录
+ */
+export interface TaskActionLog {
+	/** 记录ID */
+	id: string;
+	/** 任务ID */
+	task_id: string;
+	/** 用户ID */
+	user_id: string;
+	/** 行动内容 */
+	content: string;
+	/** 图片URL（可选） */
+	image_url: string | null;
+	/** 心情状态：1=困难, 2=一般, 3=顺利 */
+	mood: number | null;
+	/** 是否为里程碑 */
+	is_milestone: number;
+	/** 创建时间戳 */
+	created_at: number;
+	/** 更新时间戳 */
+	updated_at: number;
 }

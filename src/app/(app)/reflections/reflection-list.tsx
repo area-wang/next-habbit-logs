@@ -22,7 +22,7 @@ export default function ReflectionList({
 	if (reflections.length === 0) {
 		return (
 			<div className="text-center py-12">
-				<p className="opacity-70">暂无反思记录</p>
+				<p className="opacity-70">暂无札记</p>
 				<p className="text-sm opacity-50 mt-1">开始记录你的思考吧</p>
 			</div>
 		);

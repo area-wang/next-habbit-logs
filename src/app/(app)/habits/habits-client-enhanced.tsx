@@ -23,6 +23,8 @@ import BatchEditDialog from "@/components/batch-edit-dialog";
 import ArchiveView from "@/components/archive-view";
 import ConfirmDialog from "@/components/confirm-dialog";
 import TagInput from "@/components/tag-input";
+import MotivationInputEnhanced, { MotivationItem } from "@/components/motivation-input-enhanced";
+import ActionLogsDialog from "@/components/action-logs-dialog";
 
 // 导入原有的组件和函数
 import * as Popover from "@radix-ui/react-popover";
@@ -303,8 +305,9 @@ export default function HabitsClientEnhanced() {
 	const [createCategoryId, setCreateCategoryId] = useState<string>("");
 	const [createTags, setCreateTags] = useState<string[]>([]);
 	const [createReminders, setCreateReminders] = useState<Array<{ timeMin: number; endTimeMin?: number | null }>>([]);
+	const [createMotivations, setCreateMotivations] = useState<MotivationItem[]>([{ content: "", images: [] }]);
 	const [creating, setCreating] = useState(false);
-	
+
 	// 编辑习惯状态
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
@@ -313,6 +316,7 @@ export default function HabitsClientEnhanced() {
 	const [editEndDate, setEditEndDate] = useState("");
 	const [editCategoryId, setEditCategoryId] = useState<string>("");
 	const [editTags, setEditTags] = useState<string[]>([]);
+	const [editMotivations, setEditMotivations] = useState<MotivationItem[]>([{ content: "", images: [] }]);
 	const [savingId, setSavingId] = useState<string | null>(null);
 	
 	// 提醒状态
@@ -327,7 +331,12 @@ export default function HabitsClientEnhanced() {
 	const [confirmBatchArchive, setConfirmBatchArchive] = useState(false);
 	const [confirmBatchRestore, setConfirmBatchRestore] = useState(false);
 	const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
-	
+
+	// 行动记录对话框状态
+	const [actionLogsDialogOpen, setActionLogsDialogOpen] = useState(false);
+	const [actionLogsHabitId, setActionLogsHabitId] = useState<string>("");
+	const [actionLogsHabitTitle, setActionLogsHabitTitle] = useState<string>("");
+
 	// 错误和加载状态
 	const [error, setError] = useState<string | null>(null);
 	const [operationLoading, setOperationLoading] = useState(false);
@@ -342,8 +351,23 @@ export default function HabitsClientEnhanced() {
 		tagMatch: tagMatchMode,
 	});
 	const { habits: archivedHabits, mutate: mutateArchivedHabits } = useHabits({ archived: true });
-	
-	const currentHabits = viewMode === "active" ? activeHabits : archivedHabits;
+
+	// 对习惯进行排序：星标项在前，然后按创建时间排序
+	const sortedCurrentHabits = useMemo(() => {
+		const habits = viewMode === "active" ? activeHabits : archivedHabits;
+		return [...habits].sort((a, b) => {
+			// 首先按星标排序（星标在前）
+			const aStarred = (a as any).starred || 0;
+			const bStarred = (b as any).starred || 0;
+			if (aStarred !== bStarred) {
+				return bStarred - aStarred; // 星标项（1）排在非星标项（0）前面
+			}
+			// 星标相同时，按创建时间倒序
+			return (b.created_at || 0) - (a.created_at || 0);
+		});
+	}, [activeHabits, archivedHabits, viewMode]);
+
+	const currentHabits = sortedCurrentHabits;
 	
 	// 计算分类的习惯数量
 	const habitCounts = useMemo(() => {
@@ -387,6 +411,7 @@ export default function HabitsClientEnhanced() {
 					categoryId: createCategoryId || null,
 					tags: createTags.length > 0 ? serializeTags(createTags) : null,
 					reminders: createReminders.length > 0 ? createReminders : undefined,
+					motivations: createMotivations.filter(m => m.content.trim()),
 				}),
 			});
 			if (!res.ok) {
@@ -401,6 +426,7 @@ export default function HabitsClientEnhanced() {
 			setCreateCategoryId("");
 			setCreateTags([]);
 			setCreateReminders([]);
+			setCreateMotivations([{ content: "", images: [] }]);
 			setShowCreateForm(false); // 创建成功后收起表单
 			refreshData();
 		} finally {
@@ -417,7 +443,9 @@ export default function HabitsClientEnhanced() {
 		setEditEndDate(h.end_date ? String(h.end_date) : "");
 		setEditCategoryId(h.category_id || "");
 		setEditTags(h.parsedTags || []);
+		setEditMotivations([{ content: "", images: [] }]);
 		void loadHabitReminders(h.id);
+		void loadHabitMotivations(h.id);
 		if (typeof window !== "undefined") {
 			setTimeout(() => {
 				const el = document.querySelector(`[data-habit-id="${h.id}"]`) as HTMLElement | null;
@@ -456,6 +484,16 @@ export default function HabitsClientEnhanced() {
 				setError(d?.error || "保存失败");
 				return;
 			}
+
+			// 保存动力
+			await fetch(`/api/habits/${h.id}/motivations`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					motivations: editMotivations.filter(m => m.content.trim()),
+				}),
+			});
+
 			refreshData();
 		} finally {
 			setSavingId(null);
@@ -475,7 +513,29 @@ export default function HabitsClientEnhanced() {
 			setOperationLoading(false);
 		}
 	};
-	
+
+	// 切换星标状态
+	const toggleStarred = async (habitId: string, currentStarred: number) => {
+		try {
+			const newStarred = currentStarred === 1 ? 0 : 1;
+			await fetch(`/api/habits/${habitId}`, {
+				method: "PATCH",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ starred: newStarred }),
+			});
+			refreshData();
+		} catch (err: any) {
+			setError(err.message || "更新星标失败");
+		}
+	};
+
+	// 打开行动记录对话框
+	const openActionLogs = (habit: HabitWithCategory) => {
+		setActionLogsHabitId(habit.id);
+		setActionLogsHabitTitle(habit.title);
+		setActionLogsDialogOpen(true);
+	};
+
 	// 恢复习惯
 	const handleRestore = async (habitId: string) => {
 		try {
@@ -603,12 +663,37 @@ export default function HabitsClientEnhanced() {
 					timeMin: x?.timeMin == null ? null : Number(x.timeMin),
 					endTimeMin: x?.endTimeMin == null ? null : Number(x.endTimeMin),
 				}))
-				.filter((x): x is { timeMin: number; endTimeMin: number | null } => 
+				.filter((x): x is { timeMin: number; endTimeMin: number | null } =>
 					x.timeMin != null && Number.isFinite(x.timeMin) && x.timeMin >= 0 && x.timeMin <= 1439
 				);
 			setHabitReminders((prev) => ({ ...prev, [habitId]: reminders }));
 		} finally {
 			setRemindersLoadingId(null);
+		}
+	}
+
+	// 加载习惯动力
+	async function loadHabitMotivations(habitId: string) {
+		try {
+			const res = await fetch(`/api/habits/${habitId}/motivations`);
+			if (!res.ok) return;
+			const data = (await res.json().catch(() => null)) as any;
+			const motivations = ((data?.motivations || []) as any[])
+				.map((x) => {
+					const content = String(x?.content || "").trim();
+					let images: string[] = [];
+					try {
+						if (x?.image_url) {
+							const parsed = JSON.parse(x.image_url);
+							if (Array.isArray(parsed)) images = parsed;
+						}
+					} catch {}
+					return { content, images };
+				})
+				.filter((x) => x.content.length > 0);
+			setEditMotivations(motivations.length > 0 ? motivations : [{ content: "", images: [] }]);
+		} catch {
+			setEditMotivations([{ content: "", images: [] }]);
 		}
 	}
 
@@ -864,6 +949,13 @@ export default function HabitsClientEnhanced() {
 												disabled={creating}
 											/>
 										</div>
+										<div>
+											<MotivationInputEnhanced
+												motivations={createMotivations}
+												onChange={setCreateMotivations}
+												disabled={creating}
+											/>
+										</div>
 										<div className="rounded-xl border border-black/10 p-3">
 											<div className="text-xs font-medium opacity-70">提醒时间</div>
 											<div className="text-xs opacity-60 mt-1">可设置多个时间点，到点会推送提醒（关闭页面也可提醒）。</div>
@@ -885,15 +977,16 @@ export default function HabitsClientEnhanced() {
 											setTitle("");
 											setDescription("");
 											setStartDate("");
-										setEndDate("");
-										setCreateCategoryId("");
-										setCreateTags([]);
-										setCreateReminders([]);
-									}}
-									disabled={creating}
-								>
-									取消
-								</button>
+											setEndDate("");
+											setCreateCategoryId("");
+											setCreateTags([]);
+											setCreateReminders([]);
+											setCreateMotivations([{ content: "", images: [] }]);
+										}}
+										disabled={creating}
+									>
+										取消
+									</button>
 								<button
 									className="flex-1 px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 									onClick={handleCreate}
@@ -999,6 +1092,26 @@ export default function HabitsClientEnhanced() {
 									{!batchMode && (
 										<div className="flex items-center gap-2 flex-shrink-0 ml-auto">
 											<button
+												className={`h-9 w-9 inline-flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+													(h as any).starred === 1
+														? "border-amber-400 bg-amber-50 text-amber-600 hover:bg-amber-100"
+														: "border-black/10 hover:bg-black/5"
+												}`}
+												onClick={() => toggleStarred(h.id, (h as any).starred || 0)}
+												aria-label={(h as any).starred === 1 ? "取消星标" : "添加星标"}
+												disabled={savingId === h.id}
+											>
+												<svg width="16" height="16" viewBox="0 0 24 24" fill={(h as any).starred === 1 ? "currentColor" : "none"} className="opacity-80">
+													<path
+														d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+														stroke="currentColor"
+														strokeWidth="2"
+														strokeLinecap="round"
+														strokeLinejoin="round"
+													/>
+												</svg>
+											</button>
+											<button
 												className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
 												onClick={() => (editingId === h.id ? setEditingId(null) : beginEdit(h))}
 												aria-label={editingId === h.id ? "取消编辑" : "编辑"}
@@ -1007,6 +1120,22 @@ export default function HabitsClientEnhanced() {
 												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
 													<path
 														d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+														stroke="currentColor"
+														strokeWidth="2"
+														strokeLinecap="round"
+														strokeLinejoin="round"
+													/>
+												</svg>
+											</button>
+											<button
+												className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-black/10 hover:bg-black/5 transition-colors cursor-pointer"
+												onClick={() => openActionLogs(h)}
+												aria-label="行动记录"
+												disabled={savingId === h.id}
+											>
+												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-80">
+													<path
+														d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
 														stroke="currentColor"
 														strokeWidth="2"
 														strokeLinecap="round"
@@ -1117,6 +1246,12 @@ export default function HabitsClientEnhanced() {
 														tags={editTags}
 														onChange={setEditTags}
 														suggestions={allTagNames}
+													/>
+												</div>
+												<div>
+													<MotivationInputEnhanced
+														motivations={editMotivations}
+														onChange={setEditMotivations}
 													/>
 												</div>
 
@@ -1256,6 +1391,14 @@ export default function HabitsClientEnhanced() {
 				categories={categories}
 				allTags={allTagNames}
 				onConfirm={handleBatchEdit}
+			/>
+
+			{/* 行动记录对话框 */}
+			<ActionLogsDialog
+				open={actionLogsDialogOpen}
+				onOpenChange={setActionLogsDialogOpen}
+				habitId={actionLogsHabitId}
+				habitTitle={actionLogsHabitTitle}
 			/>
 		</div>
 	);
