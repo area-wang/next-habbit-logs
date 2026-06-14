@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
 	const res = await getDb()
 		.prepare(
-			"SELECT id, title, description, scope_type, scope_key, start_min, end_min, remind_before_min, status, created_at, updated_at FROM tasks WHERE user_id = ? AND scope_type = ? AND scope_key = ? ORDER BY created_at DESC",
+			"SELECT id, title, description, scope_type, scope_key, start_min, end_min, remind_before_min, status, starred, created_at, updated_at FROM tasks WHERE user_id = ? AND scope_type = ? AND scope_key = ? ORDER BY created_at DESC",
 		)
 		.bind(user.id, scopeType, scopeKey)
 		.all();
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
 		startMin?: number | null;
 		endMin?: number | null;
 		remindBeforeMin?: number | null;
+		motivations?: Array<{ content: string; images: string[] } | string>;
 	};
 
 	const title = body?.title ? String(body.title).trim() : "";
@@ -150,6 +151,29 @@ export async function POST(req: NextRequest) {
 			remindBeforeMin,
 			tzOffsetMin,
 		});
+	}
+
+	// 保存动力
+	const motivations = body?.motivations || [];
+	if (motivations.length > 0) {
+		for (let i = 0; i < motivations.length && i < 5; i++) {
+			const m = motivations[i];
+			// 兼容旧格式（字符串）和新格式（对象）
+			const content = typeof m === "string" ? String(m).trim() : String(m?.content || "").trim();
+			const images = typeof m === "object" && Array.isArray(m.images) ? m.images : [];
+
+			if (content.length === 0 || content.length > 200) continue;
+
+			const motivationId = crypto.randomUUID();
+			const imageUrlJson = images.length > 0 ? JSON.stringify(images) : null;
+
+			await getDb()
+				.prepare(
+					"INSERT INTO task_motivations (id, task_id, user_id, content, image_url, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+				)
+				.bind(motivationId, id, user.id, content, imageUrlJson, i, now, now)
+				.run();
+		}
 	}
 
 	return json({ ok: true, taskId: id });

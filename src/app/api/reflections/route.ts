@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
 	const searchParam = searchParams.get("search");
 	const startDateParam = searchParams.get("startDate");
 	const endDateParam = searchParams.get("endDate");
+	const limitParam = searchParams.get("limit");
+	const offsetParam = searchParams.get("offset");
 
 	if (dateParam && !isValidYmd(dateParam)) {
 		return badRequest("invalid date");
@@ -76,6 +78,9 @@ export async function GET(req: NextRequest) {
 	if (endDateParam && !isValidYmd(endDateParam)) {
 		return badRequest("invalid endDate");
 	}
+
+	const limit = limitParam ? Math.min(Number(limitParam), 100) : 30;
+	const offset = offsetParam ? Number(offsetParam) : 0;
 
 	const db = getDb();
 
@@ -98,7 +103,14 @@ export async function GET(req: NextRequest) {
 		query += " AND date_ymd <= ?";
 		params.push(endDateParam);
 	}
-	// 如果没有提供任何日期参数，显示所有记录
+	// 默认显示最近一周
+	else {
+		const weekAgo = new Date(today);
+		weekAgo.setDate(weekAgo.getDate() - 7);
+		const weekStart = weekAgo.toISOString().split("T")[0];
+		query += " AND date_ymd >= ?";
+		params.push(weekStart);
+	}
 
 	if (tagsParam) {
 		query += " AND tags LIKE ?";
@@ -106,11 +118,12 @@ export async function GET(req: NextRequest) {
 	}
 
 	if (searchParam) {
-		query += " AND (content LIKE ? OR title LIKE ?)";
-		params.push(`%${searchParam}%`, `%${searchParam}%`);
+		query += " AND (content LIKE ? OR title LIKE ? OR tags LIKE ? OR side_tags LIKE ?)";
+		params.push(`%${searchParam}%`, `%${searchParam}%`, `%${searchParam}%`, `%${searchParam}%`);
 	}
 
-	query += " ORDER BY created_at DESC";
+	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+	params.push(limit, offset);
 
 	const reflectionsRes = await db.prepare(query).bind(...params).all();
 
@@ -127,6 +140,7 @@ export async function GET(req: NextRequest) {
 			updatedAt: Number(r.updated_at),
 		})),
 		stats,
+		hasMore: (reflectionsRes.results || []).length === limit,
 	});
 }
 

@@ -22,6 +22,7 @@ export async function PATCH(
 			category_id: string | null;
 			tags: string | string[] | null;
 			active: number;
+			starred: number;
 		}>;
 		
 		const db = getDb();
@@ -74,6 +75,18 @@ export async function PATCH(
 				);
 			}
 			updates.push("active = ?");
+			values.push(v);
+		}
+
+		if (body.starred !== undefined) {
+			const v = Number(body.starred);
+			if (!Number.isFinite(v) || (v !== 0 && v !== 1)) {
+				return NextResponse.json(
+					{ error: "starred 必须是 0 或 1" },
+					{ status: 400 }
+				);
+			}
+			updates.push("starred = ?");
 			values.push(v);
 		}
 		

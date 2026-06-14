@@ -4,32 +4,38 @@ import { useState, useEffect, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import ConfirmDialog from "@/components/confirm-dialog";
 
-interface SideTag {
+interface Tag {
 	id: number;
 	text: string;
-	side: "left" | "right";
-	y: number;
-	angle: number;
-}
-
-interface ReflectionPage {
-	id?: string;
-	title: string;
-	content: string;
-	sideTags: SideTag[];
-	pageNumber: number;
+	color: string;
 }
 
 interface ReflectionEditModalProps {
 	open: boolean;
 	onClose: () => void;
 	date: string;
-	reflectionId?: string; // 编辑时传入文章ID
+	reflectionId?: string;
 	onSuccess: () => void;
 }
 
-const MAX_TAGS = 10; // 最多标注数量
-const MAX_TAG_LENGTH = 5; // 标注最大字数
+const MAX_TAGS = 10;
+const MAX_TAG_LENGTH = 8;
+
+const TAG_COLORS = [
+	'bg-amber-100 text-amber-800 border-amber-200',
+	'bg-orange-100 text-orange-800 border-orange-200',
+	'bg-yellow-100 text-yellow-800 border-yellow-200',
+	'bg-lime-100 text-lime-800 border-lime-200',
+	'bg-green-100 text-green-800 border-green-200',
+	'bg-teal-100 text-teal-800 border-teal-200',
+	'bg-cyan-100 text-cyan-800 border-cyan-200',
+	'bg-sky-100 text-sky-800 border-sky-200',
+	'bg-blue-100 text-blue-800 border-blue-200',
+	'bg-indigo-100 text-indigo-800 border-indigo-200',
+	'bg-purple-100 text-purple-800 border-purple-200',
+	'bg-pink-100 text-pink-800 border-pink-200',
+	'bg-rose-100 text-rose-800 border-rose-200',
+];
 
 export default function ReflectionEditModal({
 	open,
@@ -38,16 +44,14 @@ export default function ReflectionEditModal({
 	reflectionId,
 	onSuccess,
 }: ReflectionEditModalProps) {
-	// 简化状态：只保留必要的
 	const [title, setTitle] = useState("");
 	const [content, setContent] = useState("");
-	const [sideTags, setSideTags] = useState<SideTag[]>([]);
+	const [tags, setTags] = useState<Tag[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [editingTagId, setEditingTagId] = useState<number | null>(null);
 	const [initialLoading, setInitialLoading] = useState(true);
 	const [confirmRemoveTag, setConfirmRemoveTag] = useState<number | null>(null);
-	const [mobileTagsExpanded, setMobileTagsExpanded] = useState(false);
 	const titleRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +66,6 @@ export default function ReflectionEditModal({
 		setInitialLoading(true);
 		try {
 			if (reflectionId) {
-				// 编辑模式：直接加载单个反思
 				const res = await fetch(`/api/reflections/${reflectionId}`);
 				if (!res.ok) throw new Error("加载失败");
 
@@ -71,30 +74,34 @@ export default function ReflectionEditModal({
 						id: string;
 						title: string | null;
 						content: string;
-						sideTags?: SideTag[];
+						sideTags?: Array<{id: number; text: string; color?: string}>;
 					};
 				};
 
 				if (data.reflection) {
 					setTitle(data.reflection.title || "");
 					setContent(data.reflection.content);
-					setSideTags(data.reflection.sideTags || []);
+					// 为旧数据添加随机颜色
+					const tagsWithColor = (data.reflection.sideTags || []).map(tag => ({
+						...tag,
+						color: tag.color || TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
+					}));
+					setTags(tagsWithColor);
 				} else {
 					setTitle("");
 					setContent("");
-					setSideTags([]);
+					setTags([]);
 				}
 			} else {
-				// 新建模式：创建空白状态
 				setTitle("");
 				setContent("");
-				setSideTags([]);
+				setTags([]);
 			}
 		} catch (err) {
 			console.error(err);
 			setTitle("");
 			setContent("");
-			setSideTags([]);
+			setTags([]);
 		} finally {
 			setInitialLoading(false);
 		}
@@ -103,98 +110,53 @@ export default function ReflectionEditModal({
 	// 同步内容到 contentEditable 元素
 	useEffect(() => {
 		if (initialLoading) return;
-		
+
 		if (titleRef.current && document.activeElement !== titleRef.current) {
 			titleRef.current.innerText = title;
 		}
 		if (contentRef.current && document.activeElement !== contentRef.current) {
 			contentRef.current.innerText = content;
 		}
-	}, [initialLoading, title, content]); // 只依赖页面索引和加载状态
+	}, [initialLoading, title, content]);
 
-	// 更新内容
 	function updateContent(newText: string) {
-		// 清理内容
 		if (newText.trim() === '') {
 			newText = '';
 		}
 		setContent(newText);
 	}
 
-	// 侧边标签功能
-	function handleMakeSideTag(e: React.MouseEvent | React.TouchEvent, side: "left" | "right") {
-		// 检查是否已达到最大数量
-		if (sideTags.length >= MAX_TAGS) {
-			setError(`最多只能添加 ${MAX_TAGS} 个批注`);
+	function handleAddTag() {
+		if (tags.length >= MAX_TAGS) {
+			setError(`最多只能添加 ${MAX_TAGS} 个标签`);
 			setTimeout(() => setError(""), 3000);
 			return;
 		}
-		
-		const rect = e.currentTarget.getBoundingClientRect();
-		let y: number;
-		
-		if ('touches' in e) {
-			y = e.touches[0].clientY - rect.top;
-		} else {
-			y = e.clientY - rect.top;
-		}
 
-		const minY = 80;
-		const maxY = rect.height - 80;
-		
-		if (y < minY) y = minY;
-		if (y > maxY) y = maxY;
-
-		const sameSideTags = sideTags.filter((t) => t.side === side);
-
-		let conflict = true;
-		let attempts = 0;
-		const minSpacing = 70;
-		
-		while (conflict && attempts < 20) {
-			conflict = sameSideTags.some((t) => Math.abs(t.y - y) < minSpacing);
-			if (conflict) {
-				y += 35;
-				if (y > maxY) {
-					y = minY + (attempts * 25);
-					if (y > maxY) {
-						setError("批注位置已满，请删除一些批注后再试");
-						setTimeout(() => setError(""), 3000);
-						return;
-					}
-				}
-			}
-			attempts++;
-		}
-		
-		if (y < minY) y = minY;
-		if (y > maxY) y = maxY;
-
-		const newTag: SideTag = {
+		const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+		const newTag: Tag = {
 			id: Date.now(),
-			text: "新批注",
-			side,
-			y,
-			angle: Number((Math.random() * 6 - 3).toFixed(1)),
+			text: "新标签",
+			color: randomColor,
 		};
-
-		setSideTags([...sideTags, newTag]);
+		setTags([...tags, newTag]);
+		setEditingTagId(newTag.id);
 	}
 
-	function handleSideTagEdit(tagId: number, newText: string) {
+	function handleTagEdit(tagId: number, newText: string) {
 		const trimmedText = newText.trim().slice(0, MAX_TAG_LENGTH);
-		setSideTags(sideTags.map((t) =>
-			t.id === tagId ? { ...t, text: trimmedText || "批注" } : t
+		setTags(tags.map((t) =>
+			t.id === tagId ? { ...t, text: trimmedText || "标签" } : t
 		));
 	}
 
-	function handleRemoveSideTag(tagId: number) {
+	function handleRemoveTag(tagId: number) {
 		setConfirmRemoveTag(tagId);
 	}
 
-	function confirmRemoveSideTag() {
+	function handleConfirmRemoveTag() {
 		if (confirmRemoveTag !== null) {
-			setSideTags(sideTags.filter((t) => t.id !== confirmRemoveTag));
+			setTags(tags.filter((t) => t.id !== confirmRemoveTag));
 			setConfirmRemoveTag(null);
 		}
 	}
@@ -202,7 +164,7 @@ export default function ReflectionEditModal({
 	async function handleSave() {
 		setError("");
 		setLoading(true);
-		
+
 		try {
 			const trimmedContent = content.trim();
 			if (!trimmedContent) {
@@ -211,7 +173,6 @@ export default function ReflectionEditModal({
 				return;
 			}
 
-			// 直接保存完整内容，不分页
 			const res = await fetch(
 				reflectionId ? `/api/reflections/${reflectionId}` : "/api/reflections",
 				{
@@ -222,7 +183,7 @@ export default function ReflectionEditModal({
 						title: title.trim() || null,
 						content: trimmedContent,
 						tags: [],
-						sideTags: sideTags,
+						sideTags: tags,
 					}),
 				}
 			);
@@ -242,10 +203,9 @@ export default function ReflectionEditModal({
 	}
 
 	return (
-		<Dialog.Root 
-			open={open} 
+		<Dialog.Root
+			open={open}
 			onOpenChange={(isOpen) => {
-				// 如果有确认对话框打开，不允许关闭主弹窗
 				if (!isOpen && confirmRemoveTag !== null) {
 					return;
 				}
@@ -256,410 +216,211 @@ export default function ReflectionEditModal({
 		>
 			<Dialog.Portal>
 				<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in" />
-				<Dialog.Content 
-					className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[95vw] sm:w-[90vw] max-w-4xl max-h-[95vh] overflow-y-auto animate-in fade-in zoom-in-95"
-				>
-					{/* 卷轴容器 */}
-					<div className="relative w-full min-h-[650px] h-[85vh] flex items-center justify-center">
-						{/* 卷轴背景 */}
-						<div
-							className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-							style={{
-								backgroundImage: "url('/scroll-bg2.png')",
-								backgroundSize: "contain",
-								backgroundPosition: "center",
-							}}
-						/>
-
-						{/* 左侧感应区（仅桌面端双击） */}
-						<div
-							className="absolute left-[10%] sm:left-[15%] top-[15%] bottom-[15%] w-[60px] sm:w-[100px] z-30 cursor-crosshair hidden sm:block"
-							onDoubleClick={(e) => handleMakeSideTag(e, "left")}
-							title="双击此处挂笺"
-						/>
-
-						{/* 右侧感应区（仅桌面端双击） */}
-						<div
-							className="absolute right-[10%] sm:right-[15%] top-[15%] bottom-[15%] w-[60px] sm:w-[100px] z-30 cursor-crosshair hidden sm:block"
-							onDoubleClick={(e) => handleMakeSideTag(e, "right")}
-							title="双击此处挂笺"
-						/>
-
-						{/* 移动端批注按钮 - 顶部中间 */}
-						<button
-							onClick={() => {
-								// 如果已有标签，切换展开/收起状态
-								if (sideTags.length > 0) {
-									setMobileTagsExpanded(!mobileTagsExpanded);
-									return;
-								}
-								
-								// 检查是否已达到最大数量
-								if (sideTags.length >= MAX_TAGS) {
-									setError(`最多只能添加 ${MAX_TAGS} 个批注`);
-									setTimeout(() => setError(""), 3000);
-									return;
-								}
-								
-								const newTag: SideTag = {
-									id: Date.now(),
-									text: "新批注",
-									side: "left",
-									y: 0,
-									angle: 0,
-								};
-								setSideTags([...sideTags, newTag]);
-								setMobileTagsExpanded(true);
-							}}
-							disabled={sideTags.length >= MAX_TAGS && !mobileTagsExpanded}
-							className="absolute left-1/2 -translate-x-1/2 top-[12%] z-30 px-3 py-1 bg-amber-900/80 text-amber-50 rounded-full text-xs hover:bg-amber-900 transition-colors shadow-lg sm:hidden disabled:opacity-50 disabled:cursor-not-allowed"
-							style={{ fontFamily: 'var(--font-serif-sc)' }}
-						>
-							{sideTags.length > 0 
-								? `${mobileTagsExpanded ? '收起' : '展开'}批注 (${sideTags.length}/${MAX_TAGS})`
-								: `+ 添加批注 (0/${MAX_TAGS})`
-							}
-						</button>
-
-						{/* 侧边标签层 - 桌面端 */}
-						<div className="absolute inset-0 pointer-events-none overflow-hidden hidden sm:block">
-							{sideTags
-								.sort((a, b) => a.y - b.y)
-								.map((tag, index) => {
-								// 确保标签位置在合理范围内
-								const clampedY = Math.max(80, Math.min(tag.y, window.innerHeight * 0.65));
-								
-								return (
-								<div
-									key={tag.id}
-									className={`absolute flex items-center pointer-events-none ${
-										tag.side === "left" ? "left-[5%] sm:left-[8%]" : "right-[5%] sm:right-[8%]"
-									}`}
-									style={{
-										top: `${clampedY}px`,
-										transform: `rotate(${tag.angle}deg)`,
-										zIndex: 100 + index, // 基于位置的 z-index，下面的标签层级更高
-									}}
-								>
-									{tag.side === "left" ? (
-										<>
-											<div
-												className="relative w-[90px] sm:w-[110px] min-h-[35px] sm:min-h-[40px] bg-[#d4b689] pointer-events-auto px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-center text-center cursor-pointer shadow-lg group"
-												style={{
-													clipPath:
-														"polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%)",
-													fontFamily: 'var(--font-serif-sc)',
-													fontSize: "0.8rem",
-													fontWeight: 500,
-													backgroundImage:
-														"url('https://www.transparenttextures.com/patterns/felt.png')",
-												}}
-											>
-												<div
-													contentEditable={editingTagId === tag.id}
-													suppressContentEditableWarning
-													onClick={(e) => {
-														if (editingTagId !== tag.id) {
-															e.stopPropagation();
-															setEditingTagId(tag.id);
-															setTimeout(() => {
-																const el = e.currentTarget;
-																el.focus();
-																const range = document.createRange();
-																range.selectNodeContents(el);
-																const sel = window.getSelection();
-																sel?.removeAllRanges();
-																sel?.addRange(range);
-															}, 0);
-														}
-													}}
-													onBlur={(e) => {
-														setEditingTagId(null);
-														handleSideTagEdit(tag.id, e.currentTarget.innerText);
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter") {
-															e.preventDefault();
-															e.currentTarget.blur();
-														}
-													}}
-													className="flex-1 outline-none text-xs sm:text-sm"
-												>
-													{tag.text}
-												</div>
-												<button
-													onClick={(e) => {
-														e.stopPropagation();
-														handleRemoveSideTag(tag.id);
-													}}
-													className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-600 text-white rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-xs hover:bg-red-700"
-													title="删除批注"
-												>
-													×
-												</button>
-												<div className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#1a120c] rounded-full" />
-											</div>
-											<div className="h-[1px] w-[35px] sm:w-[45px] bg-[#5d3a1a] opacity-60 shadow-sm" />
-										</>
-									) : (
-										<>
-											<div className="h-[1px] w-[35px] sm:w-[45px] bg-[#5d3a1a] opacity-60 shadow-sm" />
-											<div
-												className="relative w-[90px] sm:w-[110px] min-h-[35px] sm:min-h-[40px] bg-[#d4b689] pointer-events-auto px-2 sm:px-3 py-1.5 sm:py-2 flex items-center justify-center text-center cursor-pointer shadow-lg group"
-												style={{
-													clipPath:
-														"polygon(10% 0%, 100% 0%, 100% 100%, 10% 100%, 0% 50%)",
-													fontFamily: 'var(--font-serif-sc)',
-													fontSize: "0.8rem",
-													fontWeight: 500,
-													backgroundImage:
-														"url('https://www.transparenttextures.com/patterns/felt.png')",
-												}}
-											>
-												<div
-													contentEditable={editingTagId === tag.id}
-													suppressContentEditableWarning
-													onClick={(e) => {
-														if (editingTagId !== tag.id) {
-															e.stopPropagation();
-															setEditingTagId(tag.id);
-															setTimeout(() => {
-																const el = e.currentTarget;
-																el.focus();
-																const range = document.createRange();
-																range.selectNodeContents(el);
-																const sel = window.getSelection();
-																sel?.removeAllRanges();
-																sel?.addRange(range);
-															}, 0);
-														}
-													}}
-													onBlur={(e) => {
-														setEditingTagId(null);
-														handleSideTagEdit(tag.id, e.currentTarget.innerText);
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter") {
-															e.preventDefault();
-															e.currentTarget.blur();
-														}
-													}}
-													className="flex-1 outline-none text-xs sm:text-sm"
-												>
-													{tag.text}
-												</div>
-												<button
-													onClick={(e) => {
-														e.stopPropagation();
-														handleRemoveSideTag(tag.id);
-													}}
-													className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-600 text-white rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-xs hover:bg-red-700"
-													title="删除批注"
-												>
-													×
-												</button>
-												<div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-[#1a120c] rounded-full" />
-											</div>
-										</>
-									)}
-								</div>
-								);
-							})}
-						</div>
-
-						{/* 移动端标签层 - 可折叠的顶部 tag 样式 */}
-						{mobileTagsExpanded && sideTags.length > 0 && (
-							<div className="absolute top-[16%] left-1/2 -translate-x-1/2 w-[80%] z-30 sm:hidden">
-								<div className="bg-amber-50/95 backdrop-blur-sm rounded-2xl p-3 shadow-xl border border-amber-900/20">
-									<div className="flex flex-wrap gap-2 justify-center mb-2">
-										{sideTags.map((tag) => (
-											<div
-												key={tag.id}
-												className="relative bg-amber-900/80 text-amber-50 px-3 py-1 rounded-full text-xs flex items-center gap-2 shadow-md"
-												style={{ fontFamily: 'var(--font-serif-sc)' }}
-											>
-												<div
-													contentEditable={editingTagId === tag.id}
-													suppressContentEditableWarning
-													onClick={(e) => {
-														if (editingTagId !== tag.id) {
-															e.stopPropagation();
-															setEditingTagId(tag.id);
-															setTimeout(() => {
-																const el = e.currentTarget;
-																el.focus();
-																const range = document.createRange();
-																range.selectNodeContents(el);
-																const sel = window.getSelection();
-																sel?.removeAllRanges();
-																sel?.addRange(range);
-															}, 0);
-														}
-													}}
-													onBlur={(e) => {
-														setEditingTagId(null);
-														handleSideTagEdit(tag.id, e.currentTarget.innerText);
-													}}
-													onInput={(e) => {
-														// 实时限制字数
-														const text = e.currentTarget.innerText;
-														if (text.length > MAX_TAG_LENGTH) {
-															e.currentTarget.innerText = text.slice(0, MAX_TAG_LENGTH);
-															// 将光标移到末尾
-															const range = document.createRange();
-															const sel = window.getSelection();
-															range.selectNodeContents(e.currentTarget);
-															range.collapse(false);
-															sel?.removeAllRanges();
-															sel?.addRange(range);
-														}
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter") {
-															e.preventDefault();
-															e.currentTarget.blur();
-														}
-													}}
-													className="outline-none min-w-[40px] max-w-[80px]"
-												>
-													{tag.text}
-												</div>
-												<button
-													onClick={(e) => {
-														e.stopPropagation();
-														handleRemoveSideTag(tag.id);
-													}}
-													className="w-4 h-4 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700 flex-shrink-0"
-												>
-													×
-												</button>
-											</div>
-										))}
-									</div>
-									{sideTags.length < MAX_TAGS && (
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												const newTag: SideTag = {
-													id: Date.now(),
-													text: "新批注",
-													side: "left",
-													y: 0,
-													angle: 0,
-												};
-												setSideTags([...sideTags, newTag]);
-											}}
-											className="w-full py-1 bg-amber-900/60 text-amber-50 rounded-full text-xs hover:bg-amber-900/80 transition-colors"
-											style={{ fontFamily: 'var(--font-serif-sc)' }}
-										>
-											+ 添加
-										</button>
-									)}
-								</div>
-							</div>
-						)}
-
-						{/* 内容区域 */}
-						<div className="relative z-10 w-[70%] sm:w-[60%] max-h-[55%] sm:max-h-[60%] px-4 sm:px-6 py-6 sm:py-8 flex flex-col">
-							{initialLoading ? (
-								<div className="flex items-center justify-center h-full">
-									<div className="text-amber-900/50">加载中...</div>
-								</div>
-							) : (
-								<>
-									{/* 标题 - 固定不滚动 */}
-									<div
-										ref={titleRef}
-										contentEditable={!loading}
-										suppressContentEditableWarning
-										onInput={(e) => {
-											const text = e.currentTarget.innerText;
-											setTitle(text.trim() === '' ? '' : text);
-										}}
-										data-placeholder="题记（可选）"
-										className="w-full text-center text-xl sm:text-2xl md:text-3xl bg-transparent border-none outline-none text-amber-950 mb-3 sm:mb-4 md:mb-6 font-bold pb-2 sm:pb-3 md:pb-4 border-b border-amber-900/20 empty:before:content-[attr(data-placeholder)] empty:before:text-amber-900/30 px-4 sm:px-6 md:px-8 flex-shrink-0"
-										style={{ fontFamily: 'var(--font-serif-sc)' }}
-									/>
-
-									{/* 正文容器 - 可滚动 */}
-									<div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-										<style jsx>{`
-											div::-webkit-scrollbar {
-												display: none;
-											}
-										`}</style>
-										<div
-											ref={contentRef}
-											contentEditable={!loading}
-											suppressContentEditableWarning
-											onInput={(e) => {
-												const text = e.currentTarget.innerText;
-												updateContent(text);
-											}}
-											onPaste={(e) => {
-												e.preventDefault();
-												const text = e.clipboardData.getData('text/plain');
-												const selection = window.getSelection();
-												if (!selection || !contentRef.current) return;
-												
-												const range = selection.getRangeAt(0);
-												range.deleteContents();
-												const textNode = document.createTextNode(text);
-												range.insertNode(textNode);
-												
-												range.setStartAfter(textNode);
-												range.setEndAfter(textNode);
-												selection.removeAllRanges();
-												selection.addRange(range);
-												
-												const newText = contentRef.current.innerText;
-												updateContent(newText);
-											}}
-											data-placeholder="提笔落墨，纸短情长..."
-											className="w-full min-h-[220px] sm:min-h-[280px] text-sm sm:text-base md:text-lg leading-relaxed sm:leading-loose bg-transparent border-none outline-none text-amber-950 empty:before:content-[attr(data-placeholder)] empty:before:text-amber-900/30 px-4 sm:px-6 md:px-8"
-											style={{
-												fontFamily: 'var(--font-serif-sc)',
-												textAlign: "justify",
-												whiteSpace: "pre-wrap",
-												wordBreak: "break-word",
-											}}
-										/>
-									</div>
-
-									{error && (
-										<div className="mt-3 sm:mt-4 text-xs sm:text-sm text-red-700 bg-red-50/50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex-shrink-0">
-											{error}
-										</div>
-									)}
-								</>
-							)}
-						</div>
-
-						{/* 字数统计 - 固定在内容区域下方中间 */}
-						<div className="absolute bottom-[90px] sm:bottom-[110px] left-1/2 -translate-x-1/2 z-20 text-xs sm:text-sm text-amber-900/70 bg-amber-50/80 px-3 py-1 rounded-full shadow-sm">
-							{content.length} 字
-						</div>
-
-						{/* 操作按钮 */}
-						<div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex gap-2 sm:gap-4 z-20">
+				<Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[95vw] sm:w-[90vw] md:w-[800px] max-w-4xl max-h-[90vh] bg-[#fefcf3] border-2 border-amber-900/20 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+					{/* 头部 - 始终显示以满足无障碍要求 */}
+					<div className="flex-shrink-0 px-6 py-4 border-b border-amber-900/10 bg-[#fff8db]">
+						<div className="flex items-center justify-between">
+							<Dialog.Title className="text-xl font-semibold text-amber-900">
+								{reflectionId ? "编辑札记" : "新增札记"}
+							</Dialog.Title>
 							<button
 								onClick={onClose}
 								disabled={loading}
-								className="px-4 py-1.5 sm:px-6 sm:py-2 bg-amber-900/80 text-amber-50 rounded-full hover:bg-amber-900 disabled:opacity-50 transition-colors shadow-lg text-sm sm:text-base"
-								style={{ fontFamily: 'var(--font-serif-sc)', fontWeight: 500 }}
+								className="p-2 hover:bg-amber-900/10 rounded-full transition-colors disabled:opacity-50"
+								aria-label="关闭"
 							>
-								取消
-							</button>
-							<button
-								onClick={handleSave}
-								disabled={loading || !content.trim()}
-								className="px-4 py-1.5 sm:px-6 sm:py-2 bg-amber-700 text-white rounded-full hover:bg-amber-800 disabled:opacity-50 transition-colors shadow-lg text-sm sm:text-base"
-								style={{ fontFamily: 'var(--font-serif-sc)', fontWeight: 500 }}
-							>
-								{loading ? "墨迹入纸..." : "存入卷轴"}
+								<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+								</svg>
 							</button>
 						</div>
 					</div>
+
+					{initialLoading ? (
+						<div className="flex items-center justify-center h-96">
+							<div className="text-amber-900/50 text-lg">加载中...</div>
+						</div>
+					) : (
+						<div className="flex flex-col h-full max-h-[calc(90vh-73px)]">
+							{/* 标题区 - 固定 */}
+							<div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-amber-900/10" style={{ background: '#fefcf3' }}>
+								<div
+									ref={titleRef}
+									contentEditable={!loading}
+									suppressContentEditableWarning
+									onInput={(e) => {
+										const text = e.currentTarget.innerText;
+										setTitle(text.trim() === '' ? '' : text);
+									}}
+									data-placeholder="标题（可选）"
+									className="w-full text-2xl md:text-3xl bg-transparent border-none outline-none text-amber-950 font-bold empty:before:content-[attr(data-placeholder)] empty:before:text-amber-900/30"
+									style={{ fontFamily: 'var(--font-serif-sc)' }}
+								/>
+							</div>
+
+							{/* 正文区 - 可滚动 */}
+							<div className="flex-1 overflow-y-auto px-6 py-6" style={{ background: 'linear-gradient(to bottom, #fefcf3, #fef9e7)' }}>
+								<div
+									ref={contentRef}
+									contentEditable={!loading}
+									suppressContentEditableWarning
+									onInput={(e) => {
+										const text = e.currentTarget.innerText;
+										updateContent(text);
+									}}
+									onPaste={(e) => {
+										e.preventDefault();
+										const text = e.clipboardData.getData('text/plain');
+										const selection = window.getSelection();
+										if (!selection || !contentRef.current) return;
+
+										const range = selection.getRangeAt(0);
+										range.deleteContents();
+										const textNode = document.createTextNode(text);
+										range.insertNode(textNode);
+
+										range.setStartAfter(textNode);
+										range.setEndAfter(textNode);
+										selection.removeAllRanges();
+										selection.addRange(range);
+
+										const newText = contentRef.current.innerText;
+										updateContent(newText);
+									}}
+									data-placeholder="提笔落墨，记录今日思考..."
+									className="w-full min-h-[300px] text-base md:text-lg leading-relaxed bg-transparent border-none outline-none text-amber-950 empty:before:content-[attr(data-placeholder)] empty:before:text-amber-900/30"
+									style={{
+										fontFamily: 'var(--font-serif-sc)',
+										textAlign: "justify",
+										whiteSpace: "pre-wrap",
+										wordBreak: "break-word",
+									}}
+								/>
+
+								{error && (
+									<div className="mt-4 text-sm text-red-700 bg-red-50 px-4 py-2 rounded-lg border border-red-200">
+										{error}
+									</div>
+								)}
+							</div>
+
+							{/* 底部操作栏 */}
+							<div className="flex-shrink-0 border-t border-amber-900/10 bg-[#fff8db]">
+								{/* 标签区域 */}
+								<div className="px-6 pt-4 pb-2 space-y-2 border-b border-amber-900/10">
+									<div className="flex items-center justify-between">
+										<label className="text-sm font-medium text-amber-900">
+											标签 ({tags.length}/{MAX_TAGS})
+										</label>
+										{tags.length < MAX_TAGS && (
+											<button
+												onClick={handleAddTag}
+												className="px-3 py-1 text-sm bg-white/80 hover:bg-amber-900/10 text-amber-900 rounded-full transition-colors border border-amber-900/20"
+											>
+												+ 添加标签
+											</button>
+										)}
+									</div>
+
+									{tags.length > 0 && (
+										<div className="flex flex-wrap gap-2">
+											{tags.map((tag) => (
+												<div
+													key={tag.id}
+													className={`group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border ${tag.color}`}
+												>
+													<div
+														contentEditable={editingTagId === tag.id}
+														suppressContentEditableWarning
+														onClick={(e) => {
+															if (editingTagId !== tag.id) {
+																e.stopPropagation();
+																setEditingTagId(tag.id);
+																setTimeout(() => {
+																	const el = e.currentTarget;
+																	if (el) {
+																		el.focus();
+																		const range = document.createRange();
+																		range.selectNodeContents(el);
+																		const sel = window.getSelection();
+																		sel?.removeAllRanges();
+																		sel?.addRange(range);
+																	}
+																}, 10);
+															}
+														}}
+														onBlur={(e) => {
+															setEditingTagId(null);
+															handleTagEdit(tag.id, e.currentTarget.innerText);
+														}}
+														onInput={(e) => {
+															const text = e.currentTarget.innerText;
+															if (text.length > MAX_TAG_LENGTH) {
+																e.currentTarget.innerText = text.slice(0, MAX_TAG_LENGTH);
+																const range = document.createRange();
+																const sel = window.getSelection();
+																range.selectNodeContents(e.currentTarget);
+																range.collapse(false);
+																sel?.removeAllRanges();
+																sel?.addRange(range);
+															}
+														}}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																e.preventDefault();
+																e.currentTarget.blur();
+															}
+														}}
+														className="outline-none text-sm min-w-[60px] cursor-text"
+													>
+														{tag.text}
+													</div>
+													<button
+														onClick={(e) => {
+															e.stopPropagation();
+															handleRemoveTag(tag.id);
+														}}
+														className="w-4 h-4 flex items-center justify-center opacity-50 hover:opacity-100 hover:text-red-600 transition-all"
+														title="删除标签"
+													>
+														×
+													</button>
+												</div>
+											))}
+										</div>
+									)}
+								</div>
+
+								{/* 操作按钮区 */}
+								<div className="px-6 py-4">
+									<div className="flex items-center justify-between">
+										{/* 字数统计 */}
+										<div className="text-sm text-amber-900/70">
+											{content.length} 字
+										</div>
+
+										{/* 操作按钮 */}
+										<div className="flex gap-3">
+											<button
+												onClick={onClose}
+												disabled={loading}
+												className="px-6 py-2 bg-white/80 hover:bg-amber-900/10 text-amber-900 rounded-full disabled:opacity-50 transition-colors border border-amber-900/20"
+											>
+												取消
+											</button>
+											<button
+												onClick={handleSave}
+												disabled={loading || !content.trim()}
+												className="px-6 py-2 bg-amber-700 text-white rounded-full hover:bg-amber-800 disabled:opacity-50 transition-colors shadow-md"
+											>
+												{loading ? "保存中..." : "保存"}
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+t					</div>
+						)}
 				</Dialog.Content>
 			</Dialog.Portal>
 
@@ -667,12 +428,13 @@ export default function ReflectionEditModal({
 			<ConfirmDialog
 				open={confirmRemoveTag !== null}
 				onOpenChange={(open) => !open && setConfirmRemoveTag(null)}
-				title="撕掉批注"
-				description="确定要撕掉该批注吗？"
-				confirmText="撕掉"
-				onConfirm={confirmRemoveSideTag}
+				title="删除标签"
+				description="确定要删除该标签吗？"
+				confirmText="删除"
+				onConfirm={handleConfirmRemoveTag}
 				variant="warning"
 			/>
 		</Dialog.Root>
 	);
 }
+

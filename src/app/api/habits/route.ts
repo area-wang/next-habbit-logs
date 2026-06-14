@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 	const tagMatch = searchParams.get("tag_match") || "any"; // 'any' or 'all'
 
 	// 构建查询条件
-	let query = "SELECT id, title, description, frequency_type, frequency_n, active, start_date, end_date, category_id, tags, archived_at, created_at, updated_at FROM habits WHERE user_id = ?";
+	let query = "SELECT id, title, description, frequency_type, frequency_n, active, start_date, end_date, category_id, tags, archived_at, starred, created_at, updated_at FROM habits WHERE user_id = ?";
 	const bindings: any[] = [user.id];
 	
 	// 归档筛选
@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
 			endTimeMin?: number | null;
 			enabled?: boolean;
 		}>;
+		motivations?: Array<{ content: string; images: string[] } | string>;
 	};
 	const title = body?.title ? String(body.title).trim() : "";
 	if (!title) return badRequest("title is required");
@@ -187,6 +188,29 @@ export async function POST(req: NextRequest) {
 			tzOffsetMin,
 			days: DEFAULT_JOB_WINDOW_DAYS,
 		});
+	}
+
+	// 保存动力
+	const motivations = body?.motivations || [];
+	if (motivations.length > 0) {
+		for (let i = 0; i < motivations.length && i < 5; i++) {
+			const m = motivations[i];
+			// 兼容旧格式（字符串）和新格式（对象）
+			const content = typeof m === "string" ? String(m).trim() : String(m?.content || "").trim();
+			const images = typeof m === "object" && Array.isArray(m.images) ? m.images : [];
+
+			if (content.length === 0 || content.length > 200) continue;
+
+			const motivationId = crypto.randomUUID();
+			const imageUrlJson = images.length > 0 ? JSON.stringify(images) : null;
+
+			await db
+				.prepare(
+					"INSERT INTO habit_motivations (id, habit_id, user_id, content, image_url, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+				)
+				.bind(motivationId, id, user.id, content, imageUrlJson, i, now, now)
+				.run();
+		}
 	}
 
 	return json({ ok: true, habitId: id });

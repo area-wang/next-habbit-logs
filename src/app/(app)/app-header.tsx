@@ -37,7 +37,7 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 								习惯
 							</Link>
 							<Link className="hover:underline" href="/reflections">
-								三省
+								札记
 							</Link>
 							<Link className="hover:underline" href="/history">
 								历史
@@ -89,7 +89,7 @@ export default function AppHeader({ userLabel }: { userLabel: string }) {
 								习惯
 							</Link>
 							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/reflections" onClick={() => setOpen(false)}>
-								三省
+								札记
 							</Link>
 							<Link className="px-4 py-3 hover:bg-[color:var(--surface)]" href="/history" onClick={() => setOpen(false)}>
 								历史

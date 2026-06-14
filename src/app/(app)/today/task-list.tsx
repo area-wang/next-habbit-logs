@@ -15,6 +15,7 @@ type Task = {
 	startMin?: number | null;
 	endMin?: number | null;
 	remindBeforeMin?: number | null;
+	starred?: number;
 };
 
 type Habit = {
@@ -123,7 +124,16 @@ export default function TaskList({
 	const effectivePushNotifEnabled = notifEnabled && pushNotifEnabled;
 
 	useEffect(() => {
-		setTasks(initialTasks);
+		// 对任务进行排序：星标项在前
+		const sorted = [...initialTasks].sort((a, b) => {
+			const aStarred = a.starred || 0;
+			const bStarred = b.starred || 0;
+			if (aStarred !== bStarred) {
+				return bStarred - aStarred; // 星标项在前
+			}
+			return 0; // 保持原有顺序
+		});
+		setTasks(sorted);
 	}, [initialTasks]);
 
 	const yesterday = useMemo(() => shiftYmd(date, -1), [date]);
@@ -1158,8 +1168,12 @@ export default function TaskList({
 						<div
 							key={t.id}
 							data-task-id={t.id}
-							className={`w-full rounded-xl border border-[color:var(--border-color)] px-4 py-3 transition-colors ${
-								t.status === "done" ? "bg-[color:var(--surface-strong)]" : "hover:bg-[color:var(--surface)]"
+							className={`w-full rounded-xl border px-4 py-3 transition-colors ${
+								t.starred === 1
+									? "border-amber-400 bg-amber-50/30"
+									: t.status === "done"
+									? "bg-[color:var(--surface-strong)] border-[color:var(--border-color)]"
+									: "hover:bg-[color:var(--surface)] border-[color:var(--border-color)]"
 							} ${highlightTaskId === t.id ? "ring-2 ring-violet-500/80" : ""}`}
 						>
 							<div className="flex items-start justify-between gap-4">

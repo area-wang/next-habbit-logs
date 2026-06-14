@@ -42,6 +42,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 		startMin?: number | null;
 		endMin?: number | null;
 		remindBeforeMin?: number | null;
+		starred?: number;
 	};
 
 	const updates: string[] = [];
@@ -80,6 +81,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ taskId: s
 		const v = body.remindBeforeMin == null ? null : Number(body.remindBeforeMin);
 		if (v != null && (!Number.isFinite(v) || v < 0 || v > 1440)) return badRequest("invalid remindBeforeMin");
 		updates.push("remind_before_min = ?");
+		binds.push(v);
+	}
+	if (body?.starred !== undefined) {
+		const v = Number(body.starred);
+		if (!Number.isFinite(v) || (v !== 0 && v !== 1)) return badRequest("starred must be 0 or 1");
+		updates.push("starred = ?");
 		binds.push(v);
 	}
 

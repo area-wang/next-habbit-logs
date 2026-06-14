@@ -56,22 +56,31 @@ export default function ReflectionCard({
 
 	return (
 		<>
-			<div className="border border-[color:var(--border-color)] bg-[color:var(--surface)] rounded-2xl p-4 transition-all hover:bg-[color:var(--surface-strong)] cursor-pointer"
+			<div className="border border-[color:var(--border-color)] bg-[color:var(--surface)] rounded-xl p-3 transition-all hover:bg-[color:var(--surface-strong)] cursor-pointer"
 				onClick={() => setShowEditModal(true)}
 			>
-				<div className="flex items-center justify-between mb-2">
-					<div className="flex items-center gap-2">
-						<span className="text-xs opacity-70">{time}</span>
+				<div className="flex items-center justify-between gap-3">
+					<div className="flex-1 min-w-0">
+						<div className="flex items-center gap-2 mb-1">
+							<span className="text-xs opacity-70">{time}</span>
+							{reflection.title && (
+								<>
+									<span className="text-xs opacity-30">·</span>
+									<span className="text-sm font-medium truncate">{reflection.title}</span>
+								</>
+							)}
+						</div>
+						<p className="text-sm opacity-80 truncate">{reflection.content}</p>
 					</div>
 
-					<div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+					<div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
 						<button
 							onClick={() => setShowEditModal(true)}
-							className="p-2 rounded-lg hover:bg-[color:var(--surface-strong)] transition-colors group"
+							className="p-1.5 rounded-lg hover:bg-[color:var(--surface-strong)] transition-colors group"
 							title="编辑"
 						>
 							<svg
-								className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity"
+								className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -86,11 +95,11 @@ export default function ReflectionCard({
 						</button>
 						<button
 							onClick={() => setShowDeleteConfirm(true)}
-							className="p-2 rounded-lg hover:bg-red-50 transition-colors group"
+							className="p-1.5 rounded-lg hover:bg-red-50 transition-colors group"
 							title="删除"
 						>
 							<svg
-								className="w-4 h-4 text-red-600 opacity-60 group-hover:opacity-100 transition-opacity"
+								className="w-3.5 h-3.5 text-red-600 opacity-60 group-hover:opacity-100 transition-opacity"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -104,13 +113,6 @@ export default function ReflectionCard({
 							</svg>
 						</button>
 					</div>
-				</div>
-
-				<div>
-					{reflection.title && (
-						<h3 className="font-medium text-lg mb-2">{reflection.title}</h3>
-					)}
-					<p className="whitespace-pre-wrap line-clamp-3">{reflection.content}</p>
 				</div>
 			</div>
 
@@ -126,7 +128,7 @@ export default function ReflectionCard({
 				open={showDeleteConfirm}
 				onOpenChange={setShowDeleteConfirm}
 				title="确认删除"
-				description="确定要删除这条反思吗？此操作无法撤销。"
+				description="确定要删除这条札记吗？此操作无法撤销。"
 				confirmText="删除"
 				onConfirm={handleDelete}
 				loading={loading}

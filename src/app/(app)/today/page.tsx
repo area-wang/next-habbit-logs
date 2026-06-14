@@ -30,7 +30,7 @@ export default async function TodayPage({
 
 	const habitsRes = await getDb()
 		.prepare(
-			"SELECT id, title, description FROM habits WHERE user_id = ? AND active = 1 AND start_date <= ? AND (end_date IS NULL OR end_date = '' OR end_date >= ?) ORDER BY created_at DESC",
+			"SELECT id, title, description, starred FROM habits WHERE user_id = ? AND active = 1 AND start_date <= ? AND (end_date IS NULL OR end_date = '' OR end_date >= ?) ORDER BY created_at DESC",
 		)
 		.bind(user.id, date, date)
 		.all();
@@ -38,7 +38,7 @@ export default async function TodayPage({
 
 	const tasksRes = await getDb()
 		.prepare(
-			"SELECT id, title, description, status, start_min, end_min, remind_before_min FROM tasks WHERE user_id = ? AND scope_type = 'day' AND scope_key = ? ORDER BY created_at DESC",
+			"SELECT id, title, description, status, start_min, end_min, remind_before_min, starred FROM tasks WHERE user_id = ? AND scope_type = 'day' AND scope_key = ? ORDER BY created_at DESC",
 		)
 		.bind(user.id, date)
 		.all();
@@ -116,6 +116,7 @@ export default async function TodayPage({
 						startMin: t.start_min == null ? null : Number(t.start_min),
 						endMin: t.end_min == null ? null : Number(t.end_min),
 						remindBeforeMin: t.remind_before_min == null ? null : Number(t.remind_before_min),
+						starred: t.starred == null ? 0 : Number(t.starred),
 					}))}
 				/>
 			</section>
