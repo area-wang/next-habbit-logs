@@ -39,6 +39,11 @@ export default function TaskActionLogsDialog({ open, onOpenChange, taskId, taskT
 	const [newIsMilestone, setNewIsMilestone] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [editingLogId, setEditingLogId] = useState<string | null>(null);
+	const [editContent, setEditContent] = useState("");
+	const [editImages, setEditImages] = useState<string[]>([]);
+	const [editMood, setEditMood] = useState<number | null>(null);
+	const [editIsMilestone, setEditIsMilestone] = useState(false);
 
 	useEffect(() => {
 		if (open && taskId) {
@@ -113,6 +118,73 @@ export default function TaskActionLogsDialog({ open, onOpenChange, taskId, taskT
 		} catch (err) {
 			console.error("Failed to delete action log:", err);
 		}
+	}
+
+	function beginEdit(log: ActionLog) {
+		setEditingLogId(log.id);
+		setEditContent(log.content);
+		setEditMood(log.mood);
+		setEditIsMilestone(log.is_milestone === 1);
+
+		// 解析图片
+		try {
+			if (log.image_url) {
+				const images = JSON.parse(log.image_url);
+				setEditImages(Array.isArray(images) ? images : []);
+			} else {
+				setEditImages([]);
+			}
+		} catch {
+			setEditImages([]);
+		}
+	}
+
+	async function saveEdit(logId: string) {
+		if (!editContent.trim()) {
+			setError("请输入行动内容");
+			return;
+		}
+
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await fetch(`/api/tasks/${taskId}/action-logs?logId=${logId}`, {
+				method: "PATCH",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					content: editContent.trim(),
+					images: editImages,
+					mood: editMood,
+					isMilestone: editIsMilestone,
+				}),
+			});
+
+			if (!res.ok) {
+				const data = await res.json() as any;
+				setError(data.error || "更新失败");
+				return;
+			}
+
+			setEditingLogId(null);
+			setEditContent("");
+			setEditImages([]);
+			setEditMood(null);
+			setEditIsMilestone(false);
+			await loadActionLogs();
+		} catch (err) {
+			setError("更新失败");
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	function cancelEdit() {
+		setEditingLogId(null);
+		setEditContent("");
+		setEditImages([]);
+		setEditMood(null);
+		setEditIsMilestone(false);
+		setError(null);
 	}
 
 	function formatDate(timestamp: number) {
@@ -247,6 +319,8 @@ export default function TaskActionLogsDialog({ open, onOpenChange, taskId, taskT
 							<div className="space-y-3">
 								{actionLogs.map((log) => {
 									const moodOption = MOOD_OPTIONS.find((m) => m.value === log.mood);
+									const isEditing = editingLogId === log.id;
+
 									return (
 										<div
 											key={log.id}
@@ -256,51 +330,137 @@ export default function TaskActionLogsDialog({ open, onOpenChange, taskId, taskT
 													: "border-black/10"
 											}`}
 										>
-											<div className="flex items-start justify-between gap-2">
-												<div className="flex-1 min-w-0">
-													<div className="flex items-center gap-2 mb-1">
-														<span className="text-xs opacity-60">
-															{formatDate(log.created_at)}
-														</span>
-														{log.is_milestone === 1 && (
-															<span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-																🎯 里程碑
+											{isEditing ? (
+												<div className="space-y-3">
+													<textarea
+														className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 outline-none text-sm resize-none"
+														placeholder="描述你做了什么、遇到了什么挑战、有什么收获..."
+														value={editContent}
+														onChange={(e) => setEditContent(e.target.value)}
+														rows={3}
+														maxLength={500}
+														disabled={saving}
+													/>
+													<ImageUploader
+														images={editImages}
+														onChange={setEditImages}
+														disabled={saving}
+													/>
+													<div className="flex items-center gap-2">
+														<label className="text-xs font-medium opacity-70">心情：</label>
+														<div className="flex gap-2">
+															{MOOD_OPTIONS.map((mood) => (
+																<button
+																	key={mood.value}
+																	type="button"
+																	className={`px-3 py-1 rounded-lg text-sm border transition-colors ${
+																		editMood === mood.value
+																			? "border-purple-400 bg-purple-100"
+																			: "border-black/10 hover:bg-black/5"
+																	}`}
+																	onClick={() => setEditMood(editMood === mood.value ? null : mood.value)}
+																	disabled={saving}
+																>
+																	<span className="mr-1">{mood.emoji}</span>
+																	{mood.label}
+																</button>
+															))}
+														</div>
+													</div>
+													<div className="flex items-center gap-2">
+														<label className="flex items-center gap-2 cursor-pointer">
+															<input
+																type="checkbox"
+																checked={editIsMilestone}
+																onChange={(e) => setEditIsMilestone(e.target.checked)}
+																disabled={saving}
+																className="rounded"
+															/>
+															<span className="text-sm">标记为里程碑 🎯</span>
+														</label>
+													</div>
+													{error && <div className="text-sm text-red-600">{error}</div>}
+													<div className="flex gap-2">
+														<button
+															className="flex-1 h-10 px-3 rounded-xl border border-black/10 hover:bg-black/5 transition-colors text-sm"
+															onClick={cancelEdit}
+															disabled={saving}
+														>
+															取消
+														</button>
+														<button
+															className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 font-medium"
+															onClick={() => saveEdit(log.id)}
+															disabled={saving || !editContent.trim()}
+														>
+															{saving ? "保存中..." : "保存"}
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="flex items-start justify-between gap-2">
+													<div className="flex-1 min-w-0">
+														<div className="flex items-center gap-2 mb-1">
+															<span className="text-xs opacity-60">
+																{formatDate(log.created_at)}
 															</span>
+															{log.is_milestone === 1 && (
+																<span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+																	🎯 里程碑
+																</span>
+															)}
+														</div>
+														<div className="text-sm whitespace-pre-wrap break-words">
+															{log.content}
+														</div>
+														{log.image_url && (() => {
+															try {
+																const images = JSON.parse(log.image_url);
+																if (Array.isArray(images) && images.length > 0) {
+																	return <ImageGridPreview images={images} className="mt-2" />;
+																}
+															} catch {}
+															return null;
+														})()}
+														{moodOption && (
+															<div className={`text-xs mt-1 ${moodOption.color}`}>
+																{moodOption.emoji} {moodOption.label}
+															</div>
 														)}
 													</div>
-													<div className="text-sm whitespace-pre-wrap break-words">
-														{log.content}
+													<div className="flex gap-1 flex-shrink-0">
+														<button
+															className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-colors"
+															onClick={() => beginEdit(log)}
+															aria-label="编辑"
+														>
+															<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+																<path
+																	d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+																	stroke="currentColor"
+																	strokeWidth="2"
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																/>
+															</svg>
+														</button>
+														<button
+															className="h-8 w-8 rounded-lg hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors"
+															onClick={() => handleDelete(log.id)}
+															aria-label="删除"
+														>
+															<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+																<path
+																	d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"
+																	stroke="currentColor"
+																	strokeWidth="2"
+																	strokeLinecap="round"
+																/>
+															</svg>
+														</button>
 													</div>
-													{log.image_url && (() => {
-														try {
-															const images = JSON.parse(log.image_url);
-															if (Array.isArray(images) && images.length > 0) {
-																return <ImageGridPreview images={images} className="mt-2" />;
-															}
-														} catch {}
-														return null;
-													})()}
-													{moodOption && (
-														<div className={`text-xs mt-1 ${moodOption.color}`}>
-															{moodOption.emoji} {moodOption.label}
-														</div>
-													)}
 												</div>
-												<button
-													className="h-8 w-8 flex-shrink-0 rounded-lg hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors"
-													onClick={() => handleDelete(log.id)}
-													aria-label="删除"
-												>
-													<svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-														<path
-															d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"
-															stroke="currentColor"
-															strokeWidth="2"
-															strokeLinecap="round"
-														/>
-													</svg>
-												</button>
-											</div>
+											)}
 										</div>
 									);
 								})}
