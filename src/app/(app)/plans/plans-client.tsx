@@ -59,6 +59,8 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 	const [newTabScopeType, setNewTabScopeType] = useState<ScopeType>("custom");
 	const [newTabScopeKey, setNewTabScopeKey] = useState("");
 	const [confirmDeleteTab, setConfirmDeleteTab] = useState<CustomTab | null>(null);
+	const [editingTabId, setEditingTabId] = useState<string | null>(null);
+	const [editingTabName, setEditingTabName] = useState("");
 	const [hydrated, setHydrated] = useState(false);
 	const [nowMs, setNowMs] = useState<number>(0);
 	useEffect(() => {
@@ -297,6 +299,26 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 		setConfirmDeleteTab(null);
 	}
 
+	function beginEditTab(tab: CustomTab) {
+		setEditingTabId(tab.id);
+		setEditingTabName(tab.name);
+	}
+
+	async function saveEditTab(tab: CustomTab) {
+		const name = editingTabName.trim();
+		if (!name) return;
+
+		await fetch(`/api/custom-plan-tabs/${tab.id}`, {
+			method: "PATCH",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ name }),
+		});
+
+		setEditingTabId(null);
+		setEditingTabName("");
+		await loadCustomTabs();
+	}
+
 	function switchToCustomTab(tab: CustomTab) {
 		setScopeType("custom");
 		setSelectedCustomTabId(tab.id);
@@ -347,27 +369,78 @@ export default function PlansClient({ tzOffsetMin }: { tzOffsetMin: number }) {
 				{/* 自定义 tabs */}
 				{customTabs.map((tab) => (
 					<div key={tab.id} className="relative group">
-						<button
-							className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
-								scopeType === "custom" && selectedCustomTabId === tab.id
-									? "bg-purple-600 text-white border-purple-600"
-									: "border-black/10 hover:bg-black/5"
-							}`}
-							onClick={() => switchToCustomTab(tab)}
-							disabled={loading}
-						>
-							{tab.name}
-						</button>
-						<button
-							className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-							onClick={(e) => {
-								e.stopPropagation();
-								setConfirmDeleteTab(tab);
-							}}
-							title="删除"
-						>
-							×
-						</button>
+						{editingTabId === tab.id ? (
+							<div className="flex items-center gap-1 px-2 py-1 rounded-full border-2 border-purple-400 bg-purple-50">
+								<input
+									className="w-24 h-6 text-sm bg-transparent outline-none px-1"
+									value={editingTabName}
+									onChange={(e) => setEditingTabName(e.target.value.slice(0, 20))}
+									maxLength={20}
+									autoFocus
+									onKeyDown={(e) => {
+										if (e.key === "Enter") {
+											saveEditTab(tab);
+										} else if (e.key === "Escape") {
+											setEditingTabId(null);
+											setEditingTabName("");
+										}
+									}}
+								/>
+								<button
+									className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center hover:bg-purple-700"
+									onClick={() => saveEditTab(tab)}
+									title="保存"
+								>
+									✓
+								</button>
+								<button
+									className="w-5 h-5 rounded-full bg-gray-400 text-white text-xs flex items-center justify-center hover:bg-gray-500"
+									onClick={() => {
+										setEditingTabId(null);
+										setEditingTabName("");
+									}}
+									title="取消"
+								>
+									×
+								</button>
+							</div>
+						) : (
+							<>
+								<button
+									className={`text-sm px-3 py-1 rounded-full border transition-colors cursor-pointer ${
+										scopeType === "custom" && selectedCustomTabId === tab.id
+											? "bg-purple-600 text-white border-purple-600"
+											: "border-black/10 hover:bg-black/5"
+									}`}
+									onClick={() => switchToCustomTab(tab)}
+									disabled={loading}
+								>
+									{tab.name}
+								</button>
+								<div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+									<button
+										className="w-4 h-4 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center hover:bg-blue-600"
+										onClick={(e) => {
+											e.stopPropagation();
+											beginEditTab(tab);
+										}}
+										title="编辑"
+									>
+										✎
+									</button>
+									<button
+										className="w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600"
+										onClick={(e) => {
+											e.stopPropagation();
+											setConfirmDeleteTab(tab);
+										}}
+										title="删除"
+									>
+										×
+									</button>
+								</div>
+							</>
+						)}
 					</div>
 				))}
 				
